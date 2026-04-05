@@ -127,9 +127,9 @@ if __name__ == "__main__":
 
     video_path, reward, steps = record_episode(args.model, args.scenario, args.output)
 
-    # Convert to Telegram-friendly format (re-encode as h264)
+    # Convert to Telegram-friendly format (re-encode as h264, heavily compressed)
     temp_mp4 = "/tmp/doom_telegram.mp4"
-    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 23 -preset fast -pix_fmt yuv420p {temp_mp4} > /dev/null 2>&1")
+    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 32 -preset ultrafast -vf 'scale=480:-2' -maxrate 500k -bufsize 1M -pix_fmt yuv420p {temp_mp4} > /dev/null 2>&1")
 
     if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
         send_video(temp_mp4, f"🎮 Doom Agent — {steps} steps, reward {reward:.1f}")

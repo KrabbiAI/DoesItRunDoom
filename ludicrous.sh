@@ -1,21 +1,25 @@
 #!/bin/bash
 # DoesItRunDoom? - CLI
-# Usage: ./ludicrous.sh {start|stop|status}
+# Usage: ./ludicrous.sh {start|stop|status} [scenario] [sekunden]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 PIDFILE="$PROJECT_DIR/.doom_train.pid"
 LOGDIR="$PROJECT_DIR/logs"
-DURATION="${2:-3600}"  # default 1 hour
 
 get_ip() {
     hostname -I | awk '{print $1}'
 }
 
-case "$1" in
+# Parse arguments: action, scenario, duration
+ACTION="${1:-}"
+SCENARIO="${2:-deadly_corridor}"
+DURATION="${3:-3600}"
+
+case "$ACTION" in
     start)
-        echo "🏎️  DoesItRunDoom? — Deadly Corridor"
-        echo "⏱️  Training: ${DURATION}s (~$((DURATION/60)) min)"
+        echo "🏎️  DoesItRunDoom? — $SCENARIO"
+        echo "⏱️  Training: ${DURATION}s (~$(($DURATION / 60)) min)"
 
         # Stop existing
         if [ -f "$PIDFILE" ]; then
@@ -32,12 +36,12 @@ case "$1" in
 
         # Start training
         cd "$SCRIPT_DIR"
-        python3 src/train.py --duration $((DURATION / 60)) > "$LOGDIR/training.log" 2>&1 &
+        python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) > "$LOGDIR/training.log" 2>&1 &
         TRAIN_PID=$!
         echo "$TRAIN_PID" > "$PIDFILE"
 
         echo "✅ Training gestartet!"
-        echo "📨 Telegram-Nachricht kommt wenn fertig (~${DURATION}s)"
+        echo "📨 Telegram-Nachricht kommt wenn fertig (~$(($DURATION / 60)) min)"
         ;;
 
     stop)
@@ -78,11 +82,17 @@ case "$1" in
         ;;
 
     *)
-        echo "Usage: ./ludicrous.sh {start|stop|status}"
+        echo "Usage: ./ludicrous.sh {start|stop|status} [scenario] [sekunden]"
         echo ""
-        echo "  start [sekunden]  — Training starten (default: 1h)"
+        echo "  start              — Training starten (deadly_corridor, default 1h)"
+        echo "  start e1m1        — Training auf E1M1 (Hangar) starten"
+        echo "  start deadly_corridor 3600  — Custom scenario + duration"
         echo "  stop              — Training stoppen"
         echo "  status            — Status anzeigen"
+        echo ""
+        echo "Verfügbare Szenarien:"
+        echo "  deadly_corridor   — Standard RL Szenario"
+        echo "  e1m1             — Original Doom Level E1M1 (Hangar)"
         exit 1
         ;;
 esac

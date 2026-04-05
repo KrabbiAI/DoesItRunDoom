@@ -48,6 +48,30 @@ SCENARIOS = {
             "ent_coef": 0.01,
         },
     },
+
+    "e1m1": {
+        "env_id": "VizdoomDoomE1M1-S3-v0",
+        "env_cls": env_defns.VizdoomScenarioEnv,
+        "env_config": {
+            "scenario_config_file": "doom.cfg",
+            "doom_map": "E1M1",
+            "window_visible": False,
+            "screen_resolution": vizdoom.ScreenResolution.RES_800X600,
+            "screen_format": vizdoom.ScreenFormat.RGB24,
+            "doom_skill": 3,
+        },
+        "ep_timeout": 2100,
+        "ppo": {
+            "learning_rate": 3e-4,
+            "n_steps": 4096,
+            "batch_size": 64,
+            "n_epochs": 4,
+            "gamma": 0.99,
+            "gae_lambda": 0.95,
+            "clip_range": 0.2,
+            "ent_coef": 0.01,
+        },
+    },
 }
 
 DEFAULT_SCENARIO = "deadly_corridor"
