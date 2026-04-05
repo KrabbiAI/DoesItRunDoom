@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     # Convert to Telegram-friendly format (re-encode as h264, heavily compressed)
     temp_mp4 = "/tmp/doom_telegram.mp4"
-    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 40 -preset ultrafast -vf 'scale=360:-2' -maxrate 150k -bufsize 300k -pix_fmt yuv420p -r 24 -g 48 {temp_mp4} > /dev/null 2>&1")
+    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 42 -preset ultrafast -vf 'scale=240:-2' -maxrate 80k -bufsize 160k -pix_fmt yuv420p -r 15 -g 30 {temp_mp4} > /dev/null 2>&1")
 
     if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
         send_video(temp_mp4, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
