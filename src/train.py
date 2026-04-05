@@ -36,6 +36,7 @@ class TrainingCallback(BaseCallback):
         self.last_status_time = self.start_time
         self.total_timesteps = 0
         self._last_reported_elapsed = 0.0  # for delta calculation
+        self.stats = {"total_training_min": 0}
 
     def _on_step(self) -> bool:
         if len(self.model.ep_info_buffer) > 0:
@@ -163,13 +164,22 @@ def train(
 
     # Hyperparameters from config
     cfg = scenario_cfg.get("ppo", {})
-    model = PPO(
-        "CnnPolicy",
-        env,
-        tensorboard_log=os.path.join(outdir, "tensorboard"),
-        verbose=1,
-        **cfg
-    )
+    model_path = os.path.join(outdir, "final_model")
+    if os.path.exists(model_path + ".zip"):
+        print(f"📂 Model geladen von: {model_path}")
+        model = PPO.load(model_path, env=env)
+        # Reset buffer fürsauberes Weitertraining
+        model.ep_info_buffer = []
+        model.ep_success_buffer = []
+    else:
+        print(f"🆕 Neues Modell erstellt")
+        model = PPO(
+            "CnnPolicy",
+            env,
+            tensorboard_log=os.path.join(outdir, "tensorboard"),
+            verbose=1,
+            **cfg
+        )
 
     inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id, scenario)
     callback = StatusCallback(inner_callback)
