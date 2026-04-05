@@ -3,6 +3,7 @@ DoesItRunDoom? — Training Module
 Trains PPO agent for 60 minutes then saves and exits cleanly.
 """
 
+import json
 import os
 import sys
 import time
@@ -23,14 +24,16 @@ from env import ScreenOnlyWrapper
 class TrainingCallback(BaseCallback):
     """Tracks episode count during training."""
 
-    def __init__(self, notifier: TelegramNotifier, outdir: str, verbose: int = 0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, verbose: int = 0):
         super().__init__(verbose)
         self.notifier = notifier
         self.outdir = outdir
+        self.duration_min = duration_min
         self.episode_count = 0
         self.start_time = time.time()
         self.last_status_time = self.start_time
         self.total_timesteps = 0
+        self._last_reported_elapsed = 0.0  # for delta calculation
 
     def _on_step(self) -> bool:
         if len(self.model.ep_info_buffer) > 0:
@@ -40,24 +43,64 @@ class TrainingCallback(BaseCallback):
 
     def _on_training_end(self) -> None:
         elapsed = time.time() - self.start_time
+        stats = self._load_stats()
+        # Add only the delta from last reported elapsed
+        delta_min = (elapsed - self._last_reported_elapsed) / 60
+        stats['total_training_min'] = stats.get('total_training_min', 0) + delta_min
+        self._save_stats(stats)
+        total_str = self._fmt_duration(int(stats['total_training_min']))
+        expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
             f"✅ Training complete!\n"
+            f"⏱️  {elapsed/60:.1f} min\n"
             f"🎮 {self.episode_count} episodes\n"
-            f"⏱️  {elapsed/60:.1f} min"
+            f"📈 Gesamte Trainingszeit: {total_str}"
         )
 
     def send_status(self) -> None:
         """Send a status update."""
         elapsed = time.time() - self.start_time
         sps = getattr(self, 'steps_per_sec', 0) or 0
-        remaining = (self.total_timesteps / sps / 60) if sps > 0 else 0
+        stats = self._load_stats()
+        delta_min = (elapsed - self._last_reported_elapsed) / 60
+        stats['total_training_min'] = stats.get('total_training_min', 0) + delta_min
+        self._last_reported_elapsed = elapsed
+        self._save_stats(stats)
+        total_str = self._fmt_duration(int(stats['total_training_min']))
+        expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
             f"🏋️ Training läuft noch\n"
-            f"⏱️  {elapsed/60:.1f} min vergangen\n"
+            f"──────────────\n"
+            f"⏱️  {elapsed/60:.1f}/{self.duration_min} min\n"
+            f"🕐 Bis {expected_end} Uhr\n"
             f"🎮 {self.episode_count} episodes\n"
             f"📊 {self.total_timesteps} timesteps\n"
-            f"⚡ {sps:.0f} steps/s | 🔮 ~{remaining:.0f} min übrig"
+            f"⚡ {sps:.0f} steps/s\n"
+            f"📈 Gesamte Trainingszeit: {total_str}"
         )
+
+    def _load_stats(self) -> dict:
+        path = os.path.join(self.outdir, "training_stats.json")
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+        return {}
+
+    def _save_stats(self, stats: dict) -> None:
+        path = os.path.join(self.outdir, "training_stats.json")
+        with open(path, 'w') as f:
+            json.dump(stats, f)
+
+    def _fmt_duration(self, total_min: int) -> str:
+        """Format minutes as 'Xd Xh Xm'."""
+        days = total_min // (60 * 24)
+        hours = (total_min % (60 * 24)) // 60
+        mins = total_min % 60
+        parts = []
+        if days > 0: parts.append(f"{days}d")
+        if hours > 0: parts.append(f"{hours}h")
+        parts.append(f"{mins}m")
+        return " ".join(parts)
 
 
 class StatusCallback(BaseCallback):
@@ -90,7 +133,7 @@ def train(
 ):
     """Train PPO agent for specified duration (minutes)."""
     notifier = TelegramNotifier()
-    notifier.send(f"🚀 Training started!\n📁 {outdir}\n🎮 {scenario}\n⏱️  {duration_min} min")
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
 
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
     env_cls = scenario_cfg["env_cls"]
@@ -111,7 +154,7 @@ def train(
         **cfg
     )
 
-    inner_callback = TrainingCallback(notifier, outdir)
+    inner_callback = TrainingCallback(notifier, outdir, duration_min)
     callback = StatusCallback(inner_callback)
 
     # Calculate timesteps from duration (approx 10 eps/min for deadly_corridor)
@@ -134,12 +177,6 @@ def train(
     model_path = os.path.join(outdir, "final_model.zip")
     model.save(model_path)
     print(f"💾 Model saved: {model_path}")
-
-    notifier.send(
-        f"✅ Training done!\n"
-        f"⏱️  {elapsed/60:.1f} min | {inner_callback.episode_count} episodes\n"
-        f"💾 {model_path}"
-    )
 
     env.close()
 

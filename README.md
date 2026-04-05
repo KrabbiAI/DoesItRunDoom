@@ -139,6 +139,14 @@ requirements.txt       — Python Dependencies
 
 **Training startet nicht:** Prüfe ob PID-File existiert (`cat .doom_train.pid`) und Prozess noch läuft (`kill -0 <PID>`)
 
+**Trennlinie:** Notifications haben eine `──────────────` Trennlinie zwischen Header und Stats
+
+**Neues Modell starten (Reset):**
+```bash
+rm -f runs/default/final_model.zip runs/default/monitor.csv runs/default/training_stats.json
+./ludicrous.sh start 3600
+```
+
 **Video schwarz:** Raw VizDoom Frames sind sehr dunkel → `play.py` macht 2.5x brightness boost automatisch.
 
 **Telegram Notifications kommen nicht:** `src/notify.py` Credentials prüfen — aktuell hardcoded im Code.
