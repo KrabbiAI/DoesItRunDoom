@@ -18,7 +18,7 @@ class DoomEnv(gym.Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
-    def __init__(self, scenario="basic", visible=False, frame_skip=4):
+    def __init__(self, scenario="basic", visible=None, frame_skip=4):
         super().__init__()
         self.scenario = scenario
         self.visible = visible
@@ -27,13 +27,21 @@ class DoomEnv(gym.Env):
         self.game = DoomGame()
         self.game.set_window_visible(visible)
 
-        # Load scenario
+        # Load scenario config
         import os
         import vizdoom as vz
         vizdoom_dir = os.path.dirname(vz.__file__)
         scenario_dir = os.path.join(vizdoom_dir, "scenarios")
-        cfg = os.path.join(scenario_dir, f"{scenario}.cfg")
-        self.game.load_config(cfg)
+        scenario_wad = os.path.join(scenario_dir, f"{scenario}.wad")
+        game_wad = os.path.join(vizdoom_dir, "freedoom2.wad")
+        cfg_path = os.path.join(scenario_dir, f"{scenario}.cfg")
+
+        # Set paths BEFORE load_config
+        self.game.set_doom_scenario_path(scenario_wad)
+        self.game.set_doom_game_path(game_wad)
+
+        # Now load_config (which will use our pre-set scenario path)
+        self.game.load_config(cfg_path)
 
         self.game.set_screen_resolution(ScreenResolution.RES_160X120)
         self.game.set_screen_format(vz.ScreenFormat.RGB24)
@@ -68,7 +76,10 @@ class DoomEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.game.set_seed(seed)
+        if seed is not None:
+            self.game.set_seed(seed)
+        else:
+            self.game.set_seed(0)
         self.game.init()
         self.episode_step = 0
 

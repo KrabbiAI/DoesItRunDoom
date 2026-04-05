@@ -11,9 +11,10 @@ import subprocess
 from datetime import datetime
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import (
-    CallbackList, BaseCallback, EvalCallback, TensorboardCallback
+    CallbackList, BaseCallback, EvalCallback, CheckpointCallback
 )
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
@@ -23,28 +24,50 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from doom_env import DoomEnv
 
 
-class ProgressCallback(BaseCallback):
-    """Prints training progress every N episodes"""
+class TensorBoardCallback(BaseCallback):
+    """Writes rewards/lengths to TensorBoard"""
 
-    def __init__(self, print_freq=1000, verbose=1):
+    def __init__(self, log_dir, verbose=0):
+        super().__init__(verbose)
+        self.writer = SummaryWriter(log_dir)
+        self.ep_count = 0
+
+    def _on_step(self) -> bool:
+        for info in self.locals.get("infos", []):
+            if "episode" in info:
+                ep = info["episode"]
+                self.ep_count += 1
+                self.writer.add_scalar("rollout/ep_rew_mean", ep["r"], self.ep_count)
+                self.writer.add_scalar("rollout/ep_len_mean", ep["l"], self.ep_count)
+        return True
+
+    def _on_rollout_end(self) -> None:
+        pass
+
+    def _on_training_end(self) -> None:
+        self.writer.close()
+
+
+class ProgressCallback(BaseCallback):
+    """Prints training progress every N timesteps"""
+
+    def __init__(self, print_freq=10000, verbose=1):
         super().__init__(verbose)
         self.print_freq = print_freq
-        self.ep_count = 0
         self.start_time = datetime.now()
 
     def _on_step(self) -> bool:
-        # Check for episode terminations via infos
-        for info in self.locals.get("infos", []):
-            if "episode" in info:
-                self.ep_count += 1
-                if self.ep_count % self.print_freq == 0:
-                    ep = info["episode"]
-                    elapsed = (datetime.now() - self.start_time).total_seconds()
-                    reward = ep["r"]
-                    steps = ep["l"]
-                    print(f"[Ludicrous Speed] Episode {self.ep_count} | "
-                          f"Reward: {reward:.1f} | Steps: {steps} | "
-                          f"Time: {elapsed:.0f}s | FPS: {self.num_timesteps / elapsed:.0f}")
+        # Print every print_freq timesteps
+        if self.num_timesteps % self.print_freq == 0 and self.num_timesteps > 0:
+            elapsed = (datetime.now() - self.start_time).total_seconds()
+            fps = self.num_timesteps / elapsed if elapsed > 0 else 0
+            # Try to get episode info
+            ep_info = ""
+            for info in self.locals.get("infos", []):
+                if "episode" in info:
+                    ep_info = f" | Last ep: r={info['episode']['r']:.1f}, l={info['episode']['l']}"
+                    break
+            print(f"[Ludicrous Speed] Step {self.num_timesteps:,} | FPS: {fps:.0f}{ep_info}")
         return True
 
     def _on_rollout_end(self) -> None:
@@ -80,24 +103,25 @@ def train(
     # Create VecEnv
     env = DummyVecEnv([make_env(scenario=scenario, visible=visible, rank=0)])
 
-    # Tensorboard log dir
-    tb_log = os.path.join(log_dir, "tensorboard")
-
     # Callbacks
-    progress = ProgressCallback(print_freq=500)
-    tensorboard_cb = TensorboardCallback(tb_log, verbose=0)
+    progress = ProgressCallback(print_freq=10000)
+    tb_cb = TensorBoardCallback(os.path.join(log_dir, "tensorboard"))
+    ckpt_cb = CheckpointCallback(
+        save_freq=50000,
+        save_path=os.path.join(os.path.dirname(log_dir), "models"),
+        name_prefix="doom_ppo"
+    )
 
-    callbacks = CallbackList([progress, tensorboard_cb])
+    callbacks = CallbackList([progress, tb_cb, ckpt_cb])
 
     # Load existing model or create new
     if model_path and os.path.exists(model_path):
         print(f"[Ludicrous Speed] Loading existing model: {model_path}")
-        model = PPO.load(model_path, env=env, tensorboard_log=tb_log)
+        model = PPO.load(model_path, env=env)
         model.learn(
             total_timesteps=total_timesteps,
             reset_num_timesteps=False,
             callback=callbacks,
-            tb_log_name=datetime.now().strftime("%Y%m%d_%H%M%S")
         )
     else:
         print("[Ludicrous Speed] Creating new PPO model")
@@ -114,7 +138,6 @@ def train(
             n_epochs=n_epochs,
             gamma=gamma,
             verbose=0,
-            tensorboard_log=tb_log,
             policy_kwargs=policy_kwargs,
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
@@ -123,7 +146,6 @@ def train(
             total_timesteps=total_timesteps,
             reset_num_timesteps=True,
             callback=callbacks,
-            tb_log_name=datetime.now().strftime("%Y%m%d_%H%M%S")
         )
 
     # Save model
