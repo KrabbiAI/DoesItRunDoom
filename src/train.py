@@ -17,6 +17,16 @@ from stable_baselines3.common.monitor import Monitor
 
 sys.path.insert(0, os.path.dirname(__file__))
 from notify import TelegramNotifier
+
+# Graceful shutdown handler
+_graceful_shutdown = [False]
+
+def _sigterm_handler(signum, frame):
+    _graceful_shutdown[0] = True
+    print("\n🛑 SIGTERM empfangen — trainiere episode zu Ende...")
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
+signal.signal(signal.SIGINT, _sigterm_handler)
 from config import SCENARIOS
 from env import ScreenOnlyWrapper
 
@@ -24,7 +34,7 @@ from env import ScreenOnlyWrapper
 class TrainingCallback(BaseCallback):
     """Tracks episode count during training."""
 
-    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, env_id: str = "", scenario: str = "", verbose: int = 0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, env_id: str = "", scenario: str = "", graceful_shutdown: list = None, verbose: int = 0):
         super().__init__(verbose)
         self.notifier = notifier
         self.outdir = outdir
@@ -37,8 +47,12 @@ class TrainingCallback(BaseCallback):
         self.total_timesteps = 0
         self._last_reported_elapsed = 0.0  # for delta calculation
         self.stats = {"total_training_min": 0}
+        self.graceful_shutdown = graceful_shutdown if graceful_shutdown is not None else [False]
 
     def _on_step(self) -> bool:
+        if self.graceful_shutdown and self.graceful_shutdown[0]:
+            print("\n🛑 Graceful shutdown — stoppe nach diesem step")
+            return False  # Stop training after this step
         if len(self.model.ep_info_buffer) > 0:
             self.episode_count += 1
         self.total_timesteps += 1
@@ -182,7 +196,7 @@ def train(
             **cfg
         )
 
-    inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id, scenario)
+    inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id, scenario, _graceful_shutdown)
     callback = StatusCallback(inner_callback)
 
     # Fixed: 1.7 * ep_timeout gives ~60min training at 58 steps/s
