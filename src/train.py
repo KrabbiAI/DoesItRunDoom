@@ -24,7 +24,7 @@ from env import ScreenOnlyWrapper
 class TrainingCallback(BaseCallback):
     """Tracks episode count during training."""
 
-    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, env_id: str = "", verbose: int = 0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, env_id: str = "", scenario: str = "", verbose: int = 0):
         super().__init__(verbose)
         self.notifier = notifier
         self.outdir = outdir
@@ -171,7 +171,7 @@ def train(
         **cfg
     )
 
-    inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id)
+    inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id, scenario)
     callback = StatusCallback(inner_callback)
 
     # Fixed: 1.7 * ep_timeout gives ~60min training at 58 steps/s
