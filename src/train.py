@@ -30,6 +30,7 @@ class TrainingCallback(BaseCallback):
         self.outdir = outdir
         self.duration_min = duration_min
         self.env_id = env_id
+        self.scenario = scenario
         self.episode_count = 0
         self.start_time = time.time()
         self.last_status_time = self.start_time
@@ -44,12 +45,11 @@ class TrainingCallback(BaseCallback):
 
     def _on_training_end(self) -> None:
         elapsed = time.time() - self.start_time
-        stats = self._load_stats()
         # Add only the delta from last reported elapsed
         delta_min = (elapsed - self._last_reported_elapsed) / 60
-        stats['total_training_min'] = stats.get('total_training_min', 0) + delta_min
-        self._save_stats(stats)
-        total_str = self._fmt_duration(int(stats['total_training_min']))
+        self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
+        self._save_stats(self.stats)
+        total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
             f"✅ Training complete!\n"
@@ -62,12 +62,11 @@ class TrainingCallback(BaseCallback):
         """Send a status update."""
         elapsed = time.time() - self.start_time
         sps = getattr(self, 'steps_per_sec', 0) or 0
-        stats = self._load_stats()
         delta_min = (elapsed - self._last_reported_elapsed) / 60
-        stats['total_training_min'] = stats.get('total_training_min', 0) + delta_min
+        self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
         self._last_reported_elapsed = elapsed
-        self._save_stats(stats)
-        total_str = self._fmt_duration(int(stats['total_training_min']))
+        self._save_stats(self.stats)
+        total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
             f"🏋️ Training läuft noch\n"
@@ -81,6 +80,7 @@ class TrainingCallback(BaseCallback):
         )
 
     def _load_stats(self) -> dict:
+        """Load ALL stats from file."""
         path = os.path.join(self.outdir, "training_stats.json")
         if os.path.exists(path):
             with open(path) as f:
@@ -88,9 +88,23 @@ class TrainingCallback(BaseCallback):
         return {}
 
     def _save_stats(self, stats: dict) -> None:
+        """Save stats file preserving other scenarios."""
         path = os.path.join(self.outdir, "training_stats.json")
+        all_stats = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                all_stats = json.load(f)
+        # Update this scenario's data
+        all_stats[self.scenario] = {
+            'total_training_min': stats.get('total_training_min', 0)
+        }
         with open(path, 'w') as f:
-            json.dump(stats, f)
+            json.dump(all_stats, f, indent=2)
+
+    def _get_cumulative_min(self) -> float:
+        """Get cumulative training minutes for THIS scenario."""
+        all_stats = self._load_stats()
+        return all_stats.get(self.scenario, {}).get('total_training_min', 0)
 
     def _fmt_duration(self, total_min: int) -> str:
         """Format minutes as 'Xd Xh Xm'."""
