@@ -1,8 +1,12 @@
 """Scenario and hyperparameter configuration for DoesItRunDoom?"""
 
+import vizdoom
+import vizdoom.gymnasium_wrapper.gymnasium_env_defns as env_defns
+
 SCENARIOS = {
     "deadly_corridor": {
         "env_id": "VizdoomScenario-v0",
+        "env_cls": env_defns.VizdoomScenarioEnv,
         "env_config": {
             "scenario_config_file": "deadly_corridor.cfg",
             "window_visible": False,
@@ -21,7 +25,9 @@ SCENARIOS = {
     },
     "health_gathering": {
         "env_id": "VizdoomHealthGatheringSupreme-v0",
+        "env_cls": env_defns.VizdoomScenarioEnv,
         "env_config": {
+            "scenario_config_file": "health_gathering_supreme.cfg",
             "window_visible": False,
         },
         "ep_timeout": 2100,

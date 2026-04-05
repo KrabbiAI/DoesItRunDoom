@@ -9,7 +9,6 @@ import time
 import argparse
 from datetime import datetime
 
-import gymnasium as gym
 import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
@@ -18,6 +17,7 @@ from stable_baselines3.common.monitor import Monitor
 sys.path.insert(0, os.path.dirname(__file__))
 from notify import TelegramNotifier
 from config import SCENARIOS
+from env import ScreenOnlyWrapper
 
 
 class TrainingCallback(BaseCallback):
@@ -55,11 +55,12 @@ def train(
     notifier.send(f"🚀 Training started!\n📁 {outdir}\n🎮 {scenario}\n⏱️  {duration_min} min")
 
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
-    env_id = scenario_cfg["env_id"]
+    env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 
-    # Create env (no video recording here — handled separately)
-    env = gym.make(env_id, **env_config)
+    # Create env directly (not via gymnasium.make — envs not registered)
+    env = env_cls(**env_config)
+    env = ScreenOnlyWrapper(env)
     env = Monitor(env, outdir)
 
     # Hyperparameters from config
@@ -108,7 +109,6 @@ if __name__ == "__main__":
     parser.add_argument("--outdir", type=str, default="runs/default", help="Output directory")
     parser.add_argument("--scenario", type=str, default="deadly_corridor")
     parser.add_argument("--duration", type=int, default=60, help="Training duration in minutes")
-
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
