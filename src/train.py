@@ -29,10 +29,13 @@ class TrainingCallback(BaseCallback):
         self.outdir = outdir
         self.episode_count = 0
         self.start_time = time.time()
+        self.last_status_time = self.start_time
+        self.total_timesteps = 0
 
     def _on_step(self) -> bool:
         if len(self.model.ep_info_buffer) > 0:
             self.episode_count += 1
+        self.total_timesteps += 1
         return True
 
     def _on_training_end(self) -> None:
@@ -42,6 +45,41 @@ class TrainingCallback(BaseCallback):
             f"🎮 {self.episode_count} episodes\n"
             f"⏱️  {elapsed/60:.1f} min"
         )
+
+    def send_status(self) -> None:
+        """Send a status update."""
+        elapsed = time.time() - self.start_time
+        sps = getattr(self, 'steps_per_sec', 0) or 0
+        remaining = (self.total_timesteps / sps / 60) if sps > 0 else 0
+        self.notifier.send(
+            f"🏋️ Training läuft noch\n"
+            f"⏱️  {elapsed/60:.1f} min vergangen\n"
+            f"🎮 {self.episode_count} episodes\n"
+            f"📊 {self.total_timesteps} timesteps\n"
+            f"⚡ {sps:.0f} steps/s | 🔮 ~{remaining:.0f} min übrig"
+        )
+
+
+class StatusCallback(BaseCallback):
+    """Sends a status update every N seconds."""
+
+    def __init__(self, inner_callback: TrainingCallback, status_interval_sec: int = 300, verbose: int = 0):
+        super().__init__(verbose)
+        self.inner = inner_callback
+        self.last_status = time.time()
+        self.status_interval = status_interval_sec
+
+    def _on_step(self) -> bool:
+        self.inner.total_timesteps += 1
+        if len(self.model.ep_info_buffer) > 0:
+            self.inner.episode_count += 1
+        now = time.time()
+        if now - self.last_status >= self.status_interval:
+            elapsed = now - self.inner.start_time
+            self.inner.steps_per_sec = self.inner.total_timesteps / elapsed if elapsed > 0 else 1
+            self.inner.send_status()
+            self.last_status = now
+        return True
 
 
 def train(
@@ -73,7 +111,8 @@ def train(
         **cfg
     )
 
-    callback = TrainingCallback(notifier, outdir)
+    inner_callback = TrainingCallback(notifier, outdir)
+    callback = StatusCallback(inner_callback)
 
     # Calculate timesteps from duration (approx 10 eps/min for deadly_corridor)
     steps_per_minute = 10 * scenario_cfg.get("ep_timeout", 2100)
@@ -81,6 +120,7 @@ def train(
         total_timesteps = duration_min * steps_per_minute
 
     print(f"📊 Training for ~{total_timesteps} timesteps ({duration_min} min)")
+    inner_callback.steps_per_sec = 0  # will be calculated during training
 
     start = time.time()
     model.learn(
@@ -97,11 +137,23 @@ def train(
 
     notifier.send(
         f"✅ Training done!\n"
-        f"⏱️  {elapsed/60:.1f} min | {callback.episode_count} episodes\n"
+        f"⏱️  {elapsed/60:.1f} min | {inner_callback.episode_count} episodes\n"
         f"💾 {model_path}"
     )
 
     env.close()
+
+    # Record video of the trained agent playing
+    import subprocess
+    notifier.send("🎬 Starte Video-Aufnahme des trainierten Agenten...")
+    try:
+        result = subprocess.run(
+            ["python3", os.path.join(os.path.dirname(__file__), "play.py"), "--model", model_path, "--scenario", scenario],
+            capture_output=True, text=True, timeout=300
+        )
+        notifier.send(f"📹 Video-Aufnahme abgeschlossen!")
+    except Exception as e:
+        notifier.send(f"⚠️ Video fehlgeschlagen: {e}")
 
 
 if __name__ == "__main__":

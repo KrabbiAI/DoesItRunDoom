@@ -3,8 +3,8 @@
 import os
 import requests
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8798400513:AAHVGh4T2dtsEXZML6zmtXLNLVPM4lpAcZE")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "631196199")
 
 
 class TelegramNotifier:

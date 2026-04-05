@@ -32,7 +32,7 @@ case "$1" in
 
         # Start training
         cd "$SCRIPT_DIR"
-        python3 src/train.py --duration "$DURATION" > "$LOGDIR/training.log" 2>&1 &
+        python3 src/train.py --duration $((DURATION / 60)) > "$LOGDIR/training.log" 2>&1 &
         TRAIN_PID=$!
         echo "$TRAIN_PID" > "$PIDFILE"
 
