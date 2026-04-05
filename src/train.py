@@ -5,6 +5,7 @@ Trains PPO agent for 60 minutes then saves and exits cleanly.
 
 import json
 import os
+import signal
 import sys
 import time
 import argparse
@@ -167,7 +168,8 @@ def train(
     env_id = scenario_cfg["env_id"]
 
     scenario_name = scenario_cfg.get("name", scenario)
-    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario_name}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
+    next_status = datetime.fromtimestamp(time.time() + 300).strftime('%H:%M')
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario_name}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}\n📬 Nächstes Status-Update: {next_status} Uhr")
 
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
