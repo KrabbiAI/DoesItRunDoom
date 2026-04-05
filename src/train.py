@@ -157,8 +157,9 @@ def train(
     inner_callback = TrainingCallback(notifier, outdir, duration_min)
     callback = StatusCallback(inner_callback)
 
-    # Calculate timesteps from duration (approx 10 eps/min for deadly_corridor)
-    steps_per_minute = 10 * scenario_cfg.get("ep_timeout", 2100)
+    # Fixed: 1.7 * ep_timeout gives ~60min training at 58 steps/s
+    # (60 * 1.7 * 2100 = 214,200 timesteps / 58 steps/s = ~61 min)
+    steps_per_minute = 1.7 * scenario_cfg.get("ep_timeout", 2100)
     if total_timesteps is None:
         total_timesteps = duration_min * steps_per_minute
 
