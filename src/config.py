@@ -10,6 +10,8 @@ SCENARIOS = {
         "env_config": {
             "scenario_config_file": "deadly_corridor.cfg",
             "window_visible": False,
+            "screen_resolution": vizdoom.ScreenResolution.RES_800X600,
+            "screen_format": vizdoom.ScreenFormat.RGB24,
         },
         "ep_timeout": 2100,
         "ppo": {
@@ -29,6 +31,8 @@ SCENARIOS = {
         "env_config": {
             "scenario_config_file": "health_gathering_supreme.cfg",
             "window_visible": False,
+            "screen_resolution": vizdoom.ScreenResolution.RES_800X600,
+            "screen_format": vizdoom.ScreenFormat.RGB24,
         },
         "ep_timeout": 2100,
         "ppo": {
