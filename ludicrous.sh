@@ -3,24 +3,28 @@
 # Usage: ./ludicrous.sh {start|stop|status|continue}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOGDIR="/home/dobby/ludicrous-speed/logs"
-PIDFILE="/home/dobby/ludicrous-speed/ludicrous_speed.pid"
+PROJECT_DIR="$SCRIPT_DIR"
+LOGDIR="$PROJECT_DIR/logs"
+PIDFILE="$PROJECT_DIR/ludicrous_speed.pid"
 TENSORBOARD_PORT=6006
+
+# Get server IP
+get_ip() {
+    hostname -I | awk '{print $1}'
+}
 
 case "$1" in
     start|continue)
-        echo "🏎️  DoesItRunDoom? — One episode..."
+        echo "🏎️  DoesItRunDoom? — Deadly Corridor..."
 
         # Stop any running training first
         if [ -f "$PIDFILE" ]; then
-            PIDS=$(cat "$PIDFILE")
-            for PID in $PIDS; do
-                kill "$PID" 2>/dev/null
-            done
+            PID=$(cat "$PIDFILE")
+            kill "$PID" 2>/dev/null
             rm -f "$PIDFILE"
         fi
 
-        SERVER_IP=$(hostname -I | awk '{print $1}')
+        SERVER_IP=$(get_ip)
         echo "📊 TensorBoard: http://$SERVER_IP:$TENSORBOARD_PORT"
 
         cd "$SCRIPT_DIR"
@@ -28,19 +32,20 @@ case "$1" in
         MAIN_PID=$!
         echo "$MAIN_PID" > "$PIDFILE"
 
-        echo "✅ Started! TensorBoard: http://$SERVER_IP:$TENSORBOARD_PORT"
-        echo "📨 Du bekommst Telegram-Benachrichtigung wenn Episode fertig ist."
+        echo "✅ Started! Episode läuft..."
+        echo "📨 Telegram-Benachrichtigung kommt wenn Episode fertig ist."
+        echo "📊 TensorBoard: http://$SERVER_IP:$TENSORBOARD_PORT"
         ;;
 
     stop)
         if [ -f "$PIDFILE" ]; then
             PID=$(cat "$PIDFILE")
-            kill "$PID" 2>/dev/null && echo "✅ Gestoppt" || echo "⚠️  Prozess nicht gefunden"
+            kill "$PID" 2>/dev/null && echo "✅ Training gestoppt" || echo "⚠️ Prozess nicht gefunden"
             rm -f "$PIDFILE"
         else
             echo "⚠️  Kein Training aktiv"
         fi
-        pkill -f "tensorboard.*6006" 2>/dev/null && echo "✅ TensorBoard gestoppt" || true
+        pkill -f "tensorboard.*$TENSORBOARD_PORT" 2>/dev/null && echo "✅ TensorBoard gestoppt" || true
         ;;
 
     status)
@@ -49,6 +54,11 @@ case "$1" in
 
     *)
         echo "Usage: ./ludicrous.sh {start|stop|status|continue}"
+        echo ""
+        echo "Commands:"
+        echo "  start, continue  — Train 1 episode → notify → video"
+        echo "  stop              — Stop training"
+        echo "  status            — Show status"
         exit 1
         ;;
 esac

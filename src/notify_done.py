@@ -37,7 +37,7 @@ def send_telegram(msg):
         import requests
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         resp = requests.post(url, json={"chat_id": chat_id, "text": msg}, timeout=10)
-        print(f"[Notify] Sent: {msg[:50]}... → {resp.status_code}")
+        print(f"[Notify] Sent: {msg[:60]}... → {resp.status_code}")
         return resp.ok
     except Exception as e:
         print(f"[Notify] Telegram failed: {e}")
@@ -67,33 +67,43 @@ def main():
         ["hostname", "-I"], capture_output=True, text=True
     ).stdout.strip().split()[0]
 
-    model_path = os.path.join(MODELS_DIR, "doom_ppo_latest.zip")
-
-    # Parse training log for episode stats
+    # Parse episode stats from training log
     ep_reward = 0
     ep_steps = 0
+    model_path = os.path.join(MODELS_DIR, "doom_ppo_latest.zip")
     try:
         with open(os.path.join(LOG_DIR, "training.log")) as f:
             for line in f:
                 if "Episode done" in line:
-                    m = re.search(r"Reward: ([-\d.]+)", line)
-                    s = re.search(r"Steps: (\d+)", line)
+                    m = re.search(r"Reward:\s*([-\d.]+)", line)
+                    s = re.search(r"Steps:\s*(\d+)", line)
                     if m:
                         ep_reward = float(m.group(1))
                     if s:
                         ep_steps = int(s.group(1))
-    except:
-        pass
+                elif "Creating new model" in line:
+                    model_path = None  # New model, no history
+    except Exception as e:
+        print(f"[Notify] Log parse error: {e}")
 
-    send_telegram(
-        f"🏎️ Episode fertig!\n"
-        f"⏱️ Zeit: {elapsed}s\n"
-        f"📈 Reward: {ep_reward:.1f} | Steps: {ep_steps}\n"
-        f"📊 TensorBoard: http://{server_ip}:6006"
-    )
+    # Send notification
+    if ep_reward > 0:
+        send_telegram(
+            f"🏎️ Episode fertig!\n"
+            f"⏱️ Zeit: {elapsed}s | Steps: {ep_steps}\n"
+            f"📈 Reward: {ep_reward:.1f}\n"
+            f"📊 TensorBoard: http://{server_ip}:6006"
+        )
+    else:
+        send_telegram(
+            f"🏎️ Episode fertig!\n"
+            f"⏱️ Zeit: {elapsed}s | Steps: {ep_steps}\n"
+            f"📊 TensorBoard: http://{server_ip}:6006"
+        )
 
-    # Try video recording
+    # Record video
     try:
+        print("[Notify] Starting video recording...")
         result = subprocess.run(
             [sys.executable, os.path.join(SCRIPT_DIR, "record_video.py")],
             capture_output=True,
@@ -103,11 +113,16 @@ def main():
         videos = glob.glob(os.path.join(VIDEOS_DIR, "ludicrous_*.mp4"))
         if videos:
             latest = max(videos, key=os.path.getmtime)
-            ok = send_video(latest, f"🎬 DoesItRunDoom? — Episode mit Reward {ep_reward:.1f}")
+            ok = send_video(latest, f"🎬 DoesItRunDoom? — Deadly Corridor | Reward: {ep_reward:.1f}")
             if ok:
                 send_telegram("✅ Video geschickt!")
-    except:
-        pass
+        else:
+            print(f"[Notify] No video found: {result.stdout[:200]}")
+            send_telegram("🎬 Video: nicht verfügbar (headless)")
+    except subprocess.TimeoutExpired:
+        send_telegram("⚠️ Video-Aufnahme timed out")
+    except Exception as e:
+        send_telegram(f"⚠️ Video-Fehler: {str(e)[:50]}")
 
     send_telegram(
         f"\n"

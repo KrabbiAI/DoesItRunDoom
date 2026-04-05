@@ -1,87 +1,65 @@
 #!/usr/bin/env python3
-"""
-Ludicrous Speed - Status Checker
-Returns current training status and model info.
-"""
+"""DoesItRunDoom? - Status Checker"""
 
 import os
-import sys
 import glob
-import subprocess
-from datetime import datetime
 
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOGDIR = os.path.join(PROJECT_DIR, "logs")
+MODEL = os.path.join(PROJECT_DIR, "models", "doom_ppo_latest.zip")
 
-def get_status():
-    pidfile = os.path.join(os.path.dirname(__file__), "..", "ludicrous_speed.pid")
-    logdir = os.path.join(os.path.dirname(__file__), "..", "logs")
-    models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
+def main():
+    print("🏎️  DoesItRunDoom? — Status")
+    print("─" * 40)
 
     # Check if running
+    pidfile = os.path.join(PROJECT_DIR, "ludicrous_speed.pid")
     running = False
-    pid = None
     if os.path.exists(pidfile):
         with open(pidfile) as f:
             pid = int(f.read().strip())
         try:
-            os.kill(pid, 0)  # Check if process exists
+            os.kill(pid, 0)
             running = True
         except OSError:
-            running = False
-            # Stale PID file
             os.remove(pidfile)
 
-    # Check latest model
-    model_files = glob.glob(os.path.join(models_dir, "doom_ppo_ludicrous.zip"))
-    latest_model = max(model_files) if model_files else None
-    model_mtime = datetime.fromtimestamp(os.path.getmtime(latest_model)).strftime("%Y-%m-%d %H:%M") if latest_model else None
-
-    # Check latest tensorboard log
-    tb_runs = os.path.join(logdir, "tensorboard")
-    latest_tb = None
-    if os.path.exists(tb_runs):
-        runs = glob.glob(os.path.join(tb_runs, "*"))
-        latest_tb = max(runs) if runs else None
-
-    return {
-        "running": running,
-        "pid": pid,
-        "latest_model": latest_model,
-        "model_mtime": model_mtime,
-        "latest_tb_run": os.path.basename(latest_tb) if latest_tb else None,
-        "logdir": logdir,
-    }
-
-
-def print_status():
-    s = get_status()
-
-    print("🏎️  Ludicrous Speed — Status")
-    print("─" * 40)
-
-    if s["running"]:
-        print(f"✅ TRAINING RUNNING")
-        print(f"   PID: {s['pid']}")
+    if running:
+        print(f"✅ TRAINING LAEUFT (PID {pid})")
     else:
-        print(f"⏸️  NOT RUNNING")
+        print(f"⏸️  NICHT LAUFEND")
 
-    print()
-    if s["latest_model"]:
-        print(f"📦 Latest Model: {os.path.basename(s['latest_model'])}")
-        print(f"   Saved: {s['model_mtime']}")
+    # Check model
+    if os.path.exists(MODEL):
+        import datetime
+        mtime = os.path.getmtime(MODEL)
+        age = datetime.datetime.fromtimestamp(mtime)
+        print(f"📦 Model: doom_ppo_latest.zip")
+        print(f"   Gespeichert: {age.strftime('%H:%M:%S')}")
     else:
-        print(f"📦 No model trained yet")
+        print(f"📦 Kein Model vorhanden")
+
+    # Check latest episode log
+    train_log = os.path.join(LOGDIR, "training.log")
+    if os.path.exists(train_log):
+        with open(train_log) as f:
+            content = f.read()
+        for line in content.split('\n'):
+            if 'Episode done' in line:
+                print(f"   Letzte Episode: {line.strip()}")
+                break
 
     print()
     print(f"📊 TensorBoard: http://localhost:6006")
-    print(f"   → tensorboard --logdir {s['logdir']}")
-
     print()
-    print(f"🎮 Commands:")
-    print(f"   /doom_start   — Start training + TensorBoard")
-    print(f"   /doom_stop    — Stop training")
-    print(f"   /doom_status  — This status")
-    print(f"   /doom_video   — Record 2min gameplay and send")
+    print(f"📁 Project: {PROJECT_DIR}")
+    print()
+    print(f"Commands:")
+    print(f"   /doom_start    — 1 Episode trainieren")
+    print(f"   /doom_continue — Naechste Episode")
+    print(f"   /doom_stop     — Stoppen")
+    print(f"   /doom_status   — Diesen Status")
 
 
 if __name__ == "__main__":
-    print_status()
+    main()

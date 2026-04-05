@@ -2,7 +2,6 @@
 """
 DoesItRunDoom? - Train for ONE episode and stop.
 Episode-based training: run one episode → notify → exit.
-Use doom_continue to keep training.
 """
 
 import os
@@ -12,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from doom_env import DoomEnv
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CallbackList, BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback
 from datetime import datetime
 import torch
 
@@ -26,15 +25,20 @@ class EpisodeCallback(BaseCallback):
     def __init__(self, verbose=1):
         super().__init__(verbose)
         self.episode_done = False
+        self.start_time = datetime.now()
+        self.ep_reward = 0
+        self.ep_steps = 0
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
             if "episode" in info:
                 ep = info["episode"]
                 elapsed = (datetime.now() - self.start_time).total_seconds()
-                print(f"[DoesItRunDoom] Episode done! Reward: {ep['r']:.1f} | Steps: {ep['l']} | Time: {elapsed:.0f}s")
+                self.ep_reward = ep["r"]
+                self.ep_steps = ep["l"]
+                print(f"[DoesItRunDoom] Episode done! Reward: {self.ep_reward:.1f} | Steps: {self.ep_steps} | Time: {elapsed:.0f}s")
                 self.episode_done = True
-                return False  # Stop the training
+                return False  # Stop training
         return True
 
     def _on_rollout_end(self) -> bool:
@@ -51,14 +55,17 @@ def train_one_episode():
 
     model_path = os.path.join(MODELS_DIR, "doom_ppo_latest.zip")
 
-    # Load existing model or create new
+    # Create environment
     env = DoomEnv(scenario="deadly_corridor", visible=False)
+    n_actions = env.action_space.n
+    print(f"[DoesItRunDoom] Environment created. Action space: {n_actions} (matches deadly_corridor buttons)")
 
+    # Load existing model or create new
     if os.path.exists(model_path):
         print(f"[DoesItRunDoom] Loading existing model: {model_path}")
         model = PPO.load(model_path, env=env)
     else:
-        print("[DoesItRunDoom] Creating new model")
+        print(f"[DoesItRunDoom] Creating new model with {n_actions} actions")
         model = PPO(
             "CnnPolicy",
             env,
@@ -78,7 +85,7 @@ def train_one_episode():
     cb.start_time = datetime.now()
 
     try:
-        model.learn(1_000_000, callback=cb, reset_num_timesteps=False)
+        model.learn(total_timesteps=100_000_000, callback=cb, reset_num_timesteps=False)
     except Exception as e:
         print(f"[DoesItRunDoom] Training stopped: {e}")
 
@@ -87,10 +94,10 @@ def train_one_episode():
     print(f"[DoesItRunDoom] Model saved: {model_path}")
 
     env.close()
-    return cb.episode_done
+    return cb.episode_done, cb.ep_reward, cb.ep_steps
 
 
 if __name__ == "__main__":
-    done = train_one_episode()
-    print(f"[DoesItRunDoom] Done. Episode completed: {done}")
+    done, reward, steps = train_one_episode()
+    print(f"[DoesItRunDoom] Done. Episode: reward={reward:.1f}, steps={steps}")
     sys.exit(0 if done else 1)

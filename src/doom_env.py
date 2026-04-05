@@ -1,78 +1,84 @@
 """
-Ludicrous Speed - Doom RL Environment
-VizDoom wrapped as Gymnasium environment with reward shaping.
+DoesItRunDoom? — Doom Gymnasium Environment
+Wraps VizDoom as a Gymnasium environment.
 """
 
 import gymnasium as gym
 import numpy as np
-from vizdoom import DoomGame, ScreenResolution
 from gymnasium import spaces
+import vizdoom as vz
 
 
 class DoomEnv(gym.Env):
     """
-    VizDoom Basic scenario as Gymnasium environment.
-    Observation: Game screen (RGB or grayscale)
-    Actions: Discrete (left, right, forward, shoot, etc.)
+    VizDoom Deadly Corridor as Gymnasium environment.
+
+    7 Available buttons: MOVE_LEFT, MOVE_RIGHT, MOVE_FORWARD,
+    MOVE_BACKWARD, TURN_LEFT, TURN_RIGHT, ATTACK
+
+    Observation: RGB screen (160x120) + game variable (HEALTH)
+    Actions: Discrete (one per button)
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 35}
+    max_steps = 2100  # VizDoom tics per episode
 
-    def __init__(self, scenario="basic", visible=None, frame_skip=4):
+    def __init__(self, scenario="deadly_corridor", visible=False, frame_skip=4):
         super().__init__()
         self.scenario = scenario
         self.visible = visible
         self.frame_skip = frame_skip
 
-        self.game = DoomGame()
+        self.game = vz.DoomGame()
         self.game.set_window_visible(visible)
 
-        # Load scenario config
+        # Set WAD paths BEFORE load_config
         import os
-        import vizdoom as vz
         vizdoom_dir = os.path.dirname(vz.__file__)
         scenario_dir = os.path.join(vizdoom_dir, "scenarios")
         scenario_wad = os.path.join(scenario_dir, f"{scenario}.wad")
         game_wad = os.path.join(vizdoom_dir, "freedoom2.wad")
-        cfg_path = os.path.join(scenario_dir, f"{scenario}.cfg")
-
-        # Set paths BEFORE load_config
         self.game.set_doom_scenario_path(scenario_wad)
         self.game.set_doom_game_path(game_wad)
 
-        # Now load_config (which will use our pre-set scenario path)
+        # Load config (uses our pre-set WAD paths)
+        cfg_path = os.path.join(scenario_dir, f"{scenario}.cfg")
         self.game.load_config(cfg_path)
 
-        self.game.set_screen_resolution(ScreenResolution.RES_160X120)
+        # Override resolution to match CNN input
+        self.game.set_screen_resolution(vz.ScreenResolution.RES_160X120)
         self.game.set_screen_format(vz.ScreenFormat.RGB24)
-        self.game.set_depth_buffer_enabled(True)
-        self.game.set_labels_buffer_enabled(False)
-        self.game.set_automap_buffer_enabled(False)
 
-        # Actions: [turn left, turn right, move forward, move backward, strafe left, strafe right, shoot, use]
-        n_actions = 8
-        self.action_space = spaces.Discrete(n_actions)
-
-        # Predefined actions
-        self.actions = [
-            [1, 0, 0, 0, 0, 0, 0, 0],  # turn left
-            [0, 1, 0, 0, 0, 0, 0, 0],  # turn right
-            [0, 0, 1, 0, 0, 0, 0, 0],  # move forward
-            [0, 0, 0, 1, 0, 0, 0, 0],  # move backward
-            [0, 0, 0, 0, 1, 0, 0, 0],  # strafe left
-            [0, 0, 0, 0, 0, 1, 0, 0],  # strafe right
-            [0, 0, 0, 0, 0, 0, 1, 0],  # shoot
-            [0, 0, 0, 0, 0, 0, 0, 1],  # use
-        ]
-
+        # Observation: RGB screen buffer — use channel-last (HWC)
+        # Stable-Baselines3 CnnPolicy expects HWC for image input
+        # Shape: (height, width, channels) = (120, 160, 3)
         self.observation_space = spaces.Box(
             low=0, high=255,
             shape=(120, 160, 3),
             dtype=np.uint8
         )
 
+        # For Deadly Corridor: 7 buttons → 7 discrete actions
+        # Action i = press button i only
+        n_actions = len(self.game.get_available_buttons())
+        self.action_space = spaces.Discrete(n_actions)
+
+        # Precompute action vectors
+        # Each action = binary mask for one button
+        self.actions = self._make_action_vectors(n_actions)
+
         self.episode_step = 0
-        self.max_steps = 2100  # ~2 min at 35fps
+
+    def _make_action_vectors(self, n_actions):
+        """Create one-hot action vectors for each available button."""
+        action_vectors = []
+        available = self.game.get_available_buttons()
+        for i in range(n_actions):
+            vec = [0] * len(available)
+            if i < len(available):
+                vec[i] = 1
+            action_vectors.append(vec)
+        return action_vectors
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -92,7 +98,7 @@ class DoomEnv(gym.Env):
     def step(self, action):
         self.episode_step += 1
 
-        # Execute action
+        # Execute action (frame_skip controls steps per call)
         self.game.make_action(self.actions[action], self.frame_skip)
 
         # Get state
@@ -108,40 +114,25 @@ class DoomEnv(gym.Env):
     def _get_obs(self, state):
         if state is None:
             return np.zeros(self.observation_space.shape, dtype=np.uint8)
-        return state.screen_buffer  # RGB
+        return state.screen_buffer
 
     def _get_info(self, state):
         if state is None:
             return {}
-        return {
-            "game_variables": state.game_variables,
-            "label": None
-        }
+        health = state.game_variables[0] if state.game_variables is not None else 0
+        return {"health": health, "game_variables": state.game_variables}
 
     def _compute_reward(self, state):
         """
-        Reward shaping:
-        - +1 for being alive (each step)
-        - +10 for killing an enemy
+        Reward: VizDoom internal reward already handles:
+        - +dX for moving toward vest
+        - -dX for moving away
         - -100 for death
-        - +100 for winning (level complete)
+        We add: small living reward to encourage survival.
         """
         if self.game.is_episode_finished():
-            if self.game.is_player_dead():
-                return -100
-            else:
-                return 100  # victory
-
-        # Living reward
-        reward = 1
-
-        # Additional: check if enemy killed (binary game variable 0 = dead, 1 = alive)
-        # In basic scenario: kill count is in game variable
-        if state:
-            kill_count = state.game_variables[0] if state.game_variables is not None else 0
-            reward += kill_count * 10
-
-        return reward
+            return 0  # Already handled by VizDoom
+        return 1  # +1 per step survived
 
     def close(self):
         self.game.close()

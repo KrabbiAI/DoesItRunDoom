@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stable_baselines3 import PPO
 from doom_env import DoomEnv
-from vizdoom import ScreenResolution
 
 try:
     import cv2
@@ -43,9 +42,7 @@ def record_video_headless(model_path, output_path, duration_sec=120, scenario="b
 
     # Create env in headless mode
     env = DoomEnv(scenario=scenario, visible=False)
-    env.game.set_screen_resolution(ScreenResolution.RES_160X120)  # Match training res
     obs, info = env.reset()
-    # For display: upscale 160x120 to 640x480
     display_w, display_h = 640, 480
 
     # Use training resolution (160x120) for inference, upscale for video
@@ -124,7 +121,6 @@ def record_video_fallback(model_path, output_path, duration_sec=120, scenario="b
     model = PPO.load(model_path)
 
     env = DoomEnv(scenario=scenario, visible=True)
-    env.game.set_screen_resolution(ScreenResolution.RES_640X480)
     env.reset()
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)

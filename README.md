@@ -1,115 +1,75 @@
-# Ludicrous Speed 🏎️💨
-**To go where no AI has gone before.**
+# DoesItRunDoom? 🏎️💨
 
-Doom RL — VizDoom + Stable Baselines3 PPO, AI lernt Doom spielen.
+**Will the AI actually run Doom?**
 
-## Setup
+A reinforcement learning project that trains an AI to play Doom using VizDoom + Stable Baselines3 (PPO). The agent learns from pixel input — no hand-coded behavior, just rewards.
+
+**Current Scenario:** Deadly Corridor — navigate a corridor, survive 6 enemies, reach the vest.
+
+## Quick Start
 
 ```bash
 cd /home/dobby/ludicrous-speed
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-**Requirements:**
-- Python 3.10+
-- VizDoom (C++ build needed — `apt install vizdoom` on Linux, or build from source)
-- CUDA GPU (optional, runs on CPU too)
-
-### VizDoom Install (Linux)
-
-```bash
-# Option 1: From source (recommended for headless/server)
-git clone https://github.com/mwydmuch/ViZDoom
-cd ViZDoom && mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make -j$(nproc)
-pip install vizdoom
-
-# Option 2: Check if already installed
-python -c "import vizdoom; print(vizdoom.vizdoom_path())"
-```
-
-## Usage
-
-### Commands via Telegram
-
-```
-/doom_start  — Start training + TensorBoard
-/doom_stop   — Stop training
-/doom_status — Show status
-```
-
-### Manual
-
-```bash
-cd /home/dobby/ludicrous-speed
-
-# Start training + TensorBoard
+# Train 1 episode
 ./ludicrous.sh start
 
-# Check status
-./ludicrous.sh status
-
-# Stop
-./ludicrous.sh stop
+# Continue next episode
+./ludicrous.sh continue
 ```
 
-## TensorBoard
+## Commands
 
-While training:
-```bash
-tensorboard --logdir ./logs --port 6006
-# → http://localhost:6006
-```
+| Command | Description |
+|---------|-------------|
+| `/doom_start` | Train 1 episode → Telegram notification + video |
+| `/doom_continue` | Continue with next episode |
+| `/doom_stop` | Stop training |
+| `/doom_status` | Show current status |
+| `/doom_video` | Record 2min gameplay video |
 
-Metrics tracked:
-- `rollout/ep_rew_mean` — average episode reward
-- `rollout/ep_len_mean` — average episode length
-- `train/loss` — policy loss
-- `train/entropy` — action entropy
+## How it Works
+
+1. **DoomEnv** wraps VizDoom as a Gymnasium environment
+2. **PPO (CnnPolicy)** learns from RGB screen input
+3. **Episode-based training** — one episode at a time
+4. **Notifications** sent to Telegram when episodes complete
+5. **Videos** recorded headlessly with OpenCV
+
+## Tech Stack
+
+- VizDoom 1.3.0 — Doom engine for RL
+- Stable Baselines3 2.8.0 — PPO implementation
+- OpenCV 4.x — Headless video capture
+- PyTorch — CNN backend
+- Telegram Bot API — Notifications
 
 ## Project Structure
 
 ```
-ludicrous-speed/
-├── src/
-│   ├── doom_env.py      # Gymnasium wrapper for VizDoom
-│   ├── train.py         # PPO training with callbacks
-│   ├── play.py          # Inference + video recording
-│   ├── run_training.py  # Runner: TensorBoard + training
-│   └── status.py        # Status checker
-├── models/              # Trained models (.zip)
-├── logs/                # TensorBoard logs
-├── videos/              # Recorded gameplay
-├── ludicrous.sh         # CLI wrapper (start/stop/status)
-└── requirements.txt
+src/
+├── doom_env.py       # Gymnasium env (VizDoom wrapper)
+├── train_one.py      # Train for 1 episode
+├── record_video.py   # Headless video recording
+├── notify_done.py    # Telegram notifications
+└── status.py        # Status checker
 ```
 
-## Scenarios
+## Deadly Corridor Scenario
 
-Available VizDoom scenarios:
-- `basic` — Find and kill the enemy (default)
-- `deadly_corridor` — Navigate a corridor, collect items
-- `defend_the_center` — Survive waves
-- `deathmatch` — Multi-player style
-- `take_cover` — Use obstacles
+| Config | Value |
+|--------|-------|
+| Buttons | 7 (move, turn, shoot) |
+| Objective | Reach vest, survive enemies |
+| Episode Timeout | 2100 tics |
+| Doom Skill | 5 (hardest) |
+| Reward | +dX toward vest, -dX away, -100 death |
 
-```bash
-./ludicrous.sh start --scenario deadly_corridor
-```
+## Resources
 
-## Architecture
-
-- **Algorithm:** PPO (Proximal Policy Optimization)
-- **Policy:** CNN (CnnPolicy) — raw pixel input
-- **Network:** [256, 256] hidden layers
-- **Observations:** 160x120 RGB screen
-- **Actions:** 8 discrete (turn L/R, move F/B, strafe L/R, shoot, use)
-- **Reward:** +1/step alive, +10/kill, -100/death, +100/victory
-
-## Play a Trained Model
-
-```bash
-python src/play.py --model models/doom_ppo_ludicrous.zip --episodes 3 --record
-# Recordings saved to videos/
-```
+- **GitHub:** https://github.com/KrabbiAI/DoesItRunDoom
+- **VizDoom Docs:** https://vizdoom.farama.org
+- **SB3 Docs:** https://stable-baselines3.readthedocs.io
