@@ -36,7 +36,9 @@ case "$ACTION" in
 
         # Start training
         cd "$SCRIPT_DIR"
-        python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) > "$LOGDIR/training.log" 2>&1 &
+        OUTDIR="$PROJECT_DIR/runs/$SCENARIO"
+mkdir -p "$OUTDIR"
+python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outdir "$OUTDIR" > "$LOGDIR/training.log" 2>&1 &
         TRAIN_PID=$!
         echo "$TRAIN_PID" > "$PIDFILE"
 
