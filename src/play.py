@@ -54,7 +54,7 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
 
     notifier.send("🤖 Agent ist gestartet. Bitte warten...")
 
-    max_recording_sec = 180  # 3 minutes timeout
+    max_recording_sec = 60  # 3 minutes timeout
     while not done:
         # Timeout check — stop recording after 3 min
         if time.time() - start_time >= max_recording_sec:
