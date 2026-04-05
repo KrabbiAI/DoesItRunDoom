@@ -133,9 +133,10 @@ def train(
 ):
     """Train PPO agent for specified duration (minutes)."""
     notifier = TelegramNotifier()
-    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {env_id}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
 
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
+    env_id = scenario_cfg["env_id"]
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 

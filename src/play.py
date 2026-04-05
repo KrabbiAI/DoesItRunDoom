@@ -25,9 +25,10 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
     """Play one episode with the trained model and record a video."""
 
     notifier = TelegramNotifier()
-    notifier.send("🎬 Doom Video Recording gestartet — Agent spielt bis zum Tod...")
+    notifier.send(f"🎬 Video Recording gestartet — {env_id} bis zum Tod...")
 
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
+    env_id = scenario_cfg["env_id"]
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 
@@ -132,6 +133,6 @@ if __name__ == "__main__":
     os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 32 -preset ultrafast -vf 'scale=480:-2' -maxrate 500k -bufsize 1M -pix_fmt yuv420p {temp_mp4} > /dev/null 2>&1")
 
     if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
-        send_video(temp_mp4, f"🎮 Doom Agent — {steps} steps, reward {reward:.1f}")
+        send_video(temp_mp4, f"🎮 {env_id} — {steps} steps, reward {reward:.1f}")
     else:
-        send_video(video_path, f"🎮 Doom Agent — {steps} steps, reward {reward:.1f}")
+        send_video(video_path, f"🎮 {env_id} — {steps} steps, reward {reward:.1f}")
