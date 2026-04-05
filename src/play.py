@@ -12,6 +12,8 @@ import tempfile
 import threading
 import http.server
 import socketserver
+import socket
+import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
 from notify import TelegramNotifier
@@ -30,7 +32,7 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
     notifier = TelegramNotifier()
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
     env_id = scenario_cfg["env_id"]
-    notifier.send(f"🎬 Video Recording gestartet — {env_id} bis zum Tod...")
+    notifier.send(f"🎬 Video Recording gestartet — {scenario_cfg.get('name', scenario)} bis zum Tod...")
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 
@@ -150,14 +152,15 @@ if __name__ == "__main__":
 
     # Convert to Telegram-friendly format (re-encode as h264, heavily compressed)
     temp_mp4 = "/tmp/doom_telegram.mp4"
-    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 42 -preset ultrafast -vf 'scale=240:-2' -maxrate 80k -bufsize 160k -pix_fmt yuv420p -r 15 -g 30 {temp_mp4} > /dev/null 2>&1")
+    os.system(f"/home/dobby/.openclaw/workspace/youtube-shorts/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg -y -i {video_path} -c:v libx264 -crf 42 -preset ultrafast -vf 'scale=240:-2' -maxrate 80k -bufsize 160k -pix_fmt yuv420p -r 15 -g 30 {temp_mp4} > /dev/null 2>&1")
 
     send_path = temp_mp4 if (os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0) else video_path
     video_url = serve_video(send_path)
     
+    scenario_name = SCENARIOS.get(args.scenario, SCENARIOS["deadly_corridor"]).get("name", args.scenario)
     notifier = TelegramNotifier()
     notifier.send(
-        f"🎬 {_env_id}  📊 {steps} steps | reward {reward:.1f}  ▶️  {video_url}  ⏱️  Video max 10min verfügbar\n"
+        f"🎬 {scenario_name}  📊 {steps} steps | reward {reward:.1f}  ▶️  {video_url}  ⏱️  Video max 10min verfügbar"
     )
 
     # Keep server running briefly for download

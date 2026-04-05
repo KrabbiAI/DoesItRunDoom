@@ -5,6 +5,7 @@ import vizdoom.gymnasium_wrapper.gymnasium_env_defns as env_defns
 
 SCENARIOS = {
     "deadly_corridor": {
+        "name": "Deadly Corridor",
         "env_id": "VizdoomScenario-v0",
         "env_cls": env_defns.VizdoomScenarioEnv,
         "env_config": {
@@ -50,6 +51,7 @@ SCENARIOS = {
     },
 
     "e1m1": {
+        "name": "E1M1 Hangar",
         "env_id": "VizdoomDoomE1M1-S3-v0",
         "env_cls": env_defns.VizdoomScenarioEnv,
         "env_config": {
