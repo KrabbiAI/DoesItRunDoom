@@ -1,178 +1,137 @@
-#!/usr/bin/env python3
 """
-Ludicrous Speed - Training Script
-VizDoom RL Agent with Stable Baselines3 PPO + TensorBoard
+DoesItRunDoom? — Training Module
+Trains PPO agent for 60 minutes then saves and exits cleanly.
 """
 
 import os
 import sys
+import time
 import argparse
-import subprocess
 from datetime import datetime
 
-import torch
-from torch.utils.tensorboard import SummaryWriter
+import gymnasium as gym
+import numpy as np
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import (
-    CallbackList, BaseCallback, EvalCallback, CheckpointCallback
-)
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
 
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from doom_env import DoomEnv
+sys.path.insert(0, os.path.dirname(__file__))
+from notify import TelegramNotifier
+from config import SCENARIOS
 
 
-class TensorBoardCallback(BaseCallback):
-    """Writes rewards/lengths to TensorBoard"""
+class TrainingCallback(BaseCallback):
+    """Notifies after each episode and tracks runtime."""
 
-    def __init__(self, log_dir, verbose=0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, notify_every: int = 5, verbose: int = 0):
         super().__init__(verbose)
-        self.writer = SummaryWriter(log_dir)
-        self.ep_count = 0
+        self.notifier = notifier
+        self.outdir = outdir
+        self.notify_every = notify_every
+        self.episode_count = 0
+        self.start_time = time.time()
 
     def _on_step(self) -> bool:
-        for info in self.locals.get("infos", []):
-            if "episode" in info:
-                ep = info["episode"]
-                self.ep_count += 1
-                self.writer.add_scalar("rollout/ep_rew_mean", ep["r"], self.ep_count)
-                self.writer.add_scalar("rollout/ep_len_mean", ep["l"], self.ep_count)
-        return True
+        # Check if episode ended
+        if len(self.model.ep_info_buffer) > 0:
+            info = self.model.ep_info_buffer[-1]
+            self.episode_count += 1
 
-    def _on_rollout_end(self) -> None:
-        pass
+            r = info["r"] if "r" in info else 0.0
+            l = info["l"] if "l" in info else 0
+            t = info["t"] if "t" in info else 0
+
+            # Notify every N episodes
+            if self.episode_count % self.notify_every == 0:
+                elapsed = time.time() - self.start_time
+                msg = (
+                    f"🎮 Episode {self.episode_count}\n"
+                    f"⏱️  Reward: {r:.1f} | Steps: {l} | Time: {t:.1f}s\n"
+                    f"🕐 Elapsed: {elapsed/60:.1f} min"
+                )
+                self.notifier.send(msg)
+
+        return True
 
     def _on_training_end(self) -> None:
-        self.writer.close()
-
-
-class ProgressCallback(BaseCallback):
-    """Prints training progress every N timesteps"""
-
-    def __init__(self, print_freq=10000, verbose=1):
-        super().__init__(verbose)
-        self.print_freq = print_freq
-        self.start_time = datetime.now()
-
-    def _on_step(self) -> bool:
-        # Print every print_freq timesteps
-        if self.num_timesteps % self.print_freq == 0 and self.num_timesteps > 0:
-            elapsed = (datetime.now() - self.start_time).total_seconds()
-            fps = self.num_timesteps / elapsed if elapsed > 0 else 0
-            # Try to get episode info
-            ep_info = ""
-            for info in self.locals.get("infos", []):
-                if "episode" in info:
-                    ep_info = f" | Last ep: r={info['episode']['r']:.1f}, l={info['episode']['l']}"
-                    break
-            print(f"[Ludicrous Speed] Step {self.num_timesteps:,} | FPS: {fps:.0f}{ep_info}")
-        return True
-
-    def _on_rollout_end(self) -> None:
-        pass
-
-
-def make_env(scenario="basic", visible=False, rank=0):
-    """Create a doom environment, wrapped with Monitor"""
-    def _init():
-        env = DoomEnv(scenario=scenario, visible=visible)
-        env = Monitor(env, filename=None)  # monitor logging handled by SB3
-        return env
-    return _init
+        elapsed = time.time() - self.start_time
+        self.notifier.send(f"✅ Training complete! {self.episode_count} episodes in {elapsed/60:.1f} min")
 
 
 def train(
-    scenario="basic",
-    total_timesteps=500_000,
-    learning_rate=3e-4,
-    n_steps=4096,
-    batch_size=64,
-    n_epochs=10,
-    gamma=0.99,
-    visible=False,
-    model_path=None,
-    log_dir="./logs"
+    outdir: str,
+    scenario: str,
+    duration_min: int = 60,
+    total_timesteps: int | None = None,
+    notify_every: int = 5,
 ):
-    print(f"[Ludicrous Speed] Starting training | Scenario: {scenario} | Visible: {visible}")
-    print(f"[Ludicrous Speed] Total timesteps: {total_timesteps:,} | LR: {learning_rate}")
+    """Train PPO agent for specified duration (minutes)."""
+    notifier = TelegramNotifier()
+    notifier.send(f"🚀 Training started!\n📁 {outdir}\n🎮 {scenario}\n⏱️  {duration_min} min")
 
-    os.makedirs(log_dir, exist_ok=True)
+    scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
+    env_id = scenario_cfg["env_id"]
+    env_config = scenario_cfg.get("env_config", {})
 
-    # Create VecEnv
-    env = DummyVecEnv([make_env(scenario=scenario, visible=visible, rank=0)])
+    # Create env (no video recording here — handled separately)
+    env = gym.make(env_id, **env_config)
+    env = Monitor(env, outdir)
 
-    # Callbacks
-    progress = ProgressCallback(print_freq=10000)
-    tb_cb = TensorBoardCallback(os.path.join(log_dir, "tensorboard"))
-    ckpt_cb = CheckpointCallback(
-        save_freq=50000,
-        save_path=os.path.join(os.path.dirname(log_dir), "models"),
-        name_prefix="doom_ppo"
+    # Hyperparameters from config
+    cfg = scenario_cfg.get("ppo", {})
+    model = PPO(
+        "CnnPolicy",
+        env,
+        tensorboard_log=os.path.join(outdir, "tensorboard"),
+        verbose=1,
+        **cfg
     )
 
-    callbacks = CallbackList([progress, tb_cb, ckpt_cb])
+    callback = TrainingCallback(notifier, outdir, notify_every=notify_every)
 
-    # Load existing model or create new
-    if model_path and os.path.exists(model_path):
-        print(f"[Ludicrous Speed] Loading existing model: {model_path}")
-        model = PPO.load(model_path, env=env)
-        model.learn(
-            total_timesteps=total_timesteps,
-            reset_num_timesteps=False,
-            callback=callbacks,
-        )
-    else:
-        print("[Ludicrous Speed] Creating new PPO model")
-        policy_kwargs = {
-            "net_arch": [256, 256],  # Medium CNN policy
-        }
+    # Calculate timesteps from duration (approx 10 eps/min for deadly_corridor)
+    steps_per_minute = 10 * scenario_cfg.get("ep_timeout", 2100)
+    if total_timesteps is None:
+        total_timesteps = duration_min * steps_per_minute
 
-        model = PPO(
-            "CnnPolicy",
-            env,
-            learning_rate=learning_rate,
-            n_steps=n_steps,
-            batch_size=batch_size,
-            n_epochs=n_epochs,
-            gamma=gamma,
-            verbose=0,
-            policy_kwargs=policy_kwargs,
-            device="cuda" if torch.cuda.is_available() else "cpu",
-        )
+    print(f"📊 Training for ~{total_timesteps} timesteps ({duration_min} min)")
+    print(f"📊 Notify every {notify_every} episodes")
 
-        model.learn(
-            total_timesteps=total_timesteps,
-            reset_num_timesteps=True,
-            callback=callbacks,
-        )
+    start = time.time()
+    model.learn(
+        total_timesteps=total_timesteps,
+        callback=callback,
+        progress_bar=True,
+    )
+    elapsed = time.time() - start
 
     # Save model
-    models_dir = os.path.join(os.path.dirname(log_dir), "models")
-    os.makedirs(models_dir, exist_ok=True)
-    save_path = os.path.join(models_dir, "doom_ppo_ludicrous")
-    model.save(save_path)
-    print(f"[Ludicrous Speed] Model saved to {save_path}")
+    model_path = os.path.join(outdir, "final_model.zip")
+    model.save(model_path)
+    print(f"💾 Model saved: {model_path}")
 
-    return model
+    notifier.send(
+        f"✅ Training done!\n"
+        f"⏱️  {elapsed/60:.1f} min | {callback.episode_count} episodes\n"
+        f"💾 {model_path}"
+    )
+
+    env.close()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Ludicrous Speed - Doom RL Trainer")
-    parser.add_argument("--scenario", type=str, default="basic", help="VizDoom scenario name")
-    parser.add_argument("--timesteps", type=int, default=500_000, help="Total training timesteps")
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--visible", action="store_true", help="Show VizDoom window during training")
-    parser.add_argument("--model", type=str, default=None, help="Path to existing model to continue training")
-    parser.add_argument("--logdir", type=str, default="./logs", help="Log directory")
+    parser = argparse.ArgumentParser(description="Train Doom RL Agent")
+    parser.add_argument("--outdir", type=str, default="runs/default", help="Output directory")
+    parser.add_argument("--scenario", type=str, default="deadly_corridor")
+    parser.add_argument("--duration", type=int, default=60, help="Training duration in minutes")
+    parser.add_argument("--notify-every", type=int, default=5, help="Notify every N episodes")
     args = parser.parse_args()
 
+    os.makedirs(args.outdir, exist_ok=True)
+
     train(
+        outdir=args.outdir,
         scenario=args.scenario,
-        total_timesteps=args.timesteps,
-        learning_rate=args.lr,
-        visible=args.visible,
-        model_path=args.model,
-        log_dir=args.logdir,
+        duration_min=args.duration,
+        notify_every=args.notify_every,
     )
