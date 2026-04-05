@@ -152,7 +152,8 @@ def train(
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
     env_id = scenario_cfg["env_id"]
 
-    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {env_id}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
+    scenario_name = scenario_cfg.get("name", scenario)
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario_name}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
 
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
