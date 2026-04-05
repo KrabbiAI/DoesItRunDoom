@@ -64,7 +64,7 @@ class TrainingCallback(BaseCallback):
         # Add only the delta from last reported elapsed
         delta_min = (elapsed - self._last_reported_elapsed) / 60
         self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
-        self._save_stats(self.stats)
+        self._save_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
@@ -81,7 +81,7 @@ class TrainingCallback(BaseCallback):
         delta_min = (elapsed - self._last_reported_elapsed) / 60
         self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
         self._last_reported_elapsed = elapsed
-        self._save_stats(self.stats)
+        self._save_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
@@ -96,31 +96,23 @@ class TrainingCallback(BaseCallback):
         )
 
     def _load_stats(self) -> dict:
-        """Load ALL stats from file."""
+        """Load stats for this scenario."""
         path = os.path.join(self.outdir, "training_stats.json")
         if os.path.exists(path):
             with open(path) as f:
                 return json.load(f)
         return {}
 
-    def _save_stats(self, stats: dict) -> None:
-        """Save stats file preserving other scenarios."""
+    def _save_stats(self) -> None:
+        """Save stats for this scenario."""
         path = os.path.join(self.outdir, "training_stats.json")
-        all_stats = {}
-        if os.path.exists(path):
-            with open(path) as f:
-                all_stats = json.load(f)
-        # Update this scenario's data
-        all_stats[self.scenario] = {
-            'total_training_min': stats.get('total_training_min', 0)
-        }
         with open(path, 'w') as f:
-            json.dump(all_stats, f, indent=2)
+            json.dump(self.stats, f, indent=2)
 
     def _get_cumulative_min(self) -> float:
         """Get cumulative training minutes for THIS scenario."""
-        all_stats = self._load_stats()
-        return all_stats.get(self.scenario, {}).get('total_training_min', 0)
+        data = self._load_stats()
+        return data.get('total_training_min', 0)
 
     def _fmt_duration(self, total_min: int) -> str:
         """Format minutes as 'Xd Xh Xm'."""
