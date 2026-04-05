@@ -94,7 +94,7 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
         f"📁 {out_video}"
     )
 
-    return out_video, total_reward, steps
+    return out_video, total_reward, steps, env_id
 
 
 def send_video(video_path: str, caption: str = "🎮 Doom Agent in Action!"):
@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     # Convert to Telegram-friendly format (re-encode as h264, heavily compressed)
     temp_mp4 = "/tmp/doom_telegram.mp4"
-    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 32 -preset ultrafast -vf 'scale=480:-2' -maxrate 500k -bufsize 1M -pix_fmt yuv420p {temp_mp4} > /dev/null 2>&1")
+    os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 40 -preset ultrafast -vf 'scale=360:-2' -maxrate 150k -bufsize 300k -pix_fmt yuv420p -r 24 -g 48 {temp_mp4} > /dev/null 2>&1")
 
     if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
         send_video(temp_mp4, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
