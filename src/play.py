@@ -9,10 +9,6 @@ import sys
 import time
 import argparse
 import tempfile
-import threading
-import http.server
-import socketserver
-import socket
 import requests
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -58,7 +54,13 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
 
     notifier.send("🤖 Agent ist gestartet. Bitte warten...")
 
+    max_recording_sec = 180  # 3 minutes timeout
     while not done:
+        # Timeout check — stop recording after 3 min
+        if time.time() - start_time >= max_recording_sec:
+            print(f"⏱️  Recording timeout after {max_recording_sec}s")
+            break
+        
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
@@ -115,38 +117,18 @@ def send_video(video_path: str, caption: str = "🎮 Doom Agent in Action!"):
         return r.status_code == 200
 
 
-def serve_video(video_path: str, port: int = 7843) -> str:
-    """Serve video via HTTP and return the URL."""
-    filename = os.path.basename(video_path)
-    os.chdir(os.path.dirname(video_path))
-    
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass  # silent
-    
-    httpd = socketserver.TCPServer(("", port), Handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    
-    return f"http://{get_local_ip()}:{port}/{filename}"
-
-
-def get_local_ip() -> str:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    finally:
-        s.close()
-    return ip
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Record Doom agent playing video")
-    parser.add_argument("--model", type=str, default="runs/default/final_model", help="Path to model")
+    parser.add_argument("--model", type=str, default=None, help="Path to model (auto-selected by scenario if not provided)")
     parser.add_argument("--scenario", type=str, default="deadly_corridor")
     parser.add_argument("--output", type=str, default="/tmp/doom_playthrough.mp4")
     args = parser.parse_args()
+
+    # Auto-select model based on scenario
+    if args.model is None:
+        scenario_dir = f"runs/{args.scenario}"
+        args.model = f"{scenario_dir}/final_model"
 
     video_path, reward, steps, _env_id = record_episode(args.model, args.scenario, args.output)
 
@@ -155,14 +137,5 @@ if __name__ == "__main__":
     os.system(f"/home/dobby/.openclaw/workspace/youtube-shorts/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg -y -i {video_path} -c:v libx264 -crf 42 -preset ultrafast -vf 'scale=240:-2' -maxrate 80k -bufsize 160k -pix_fmt yuv420p -r 15 -g 30 {temp_mp4} > /dev/null 2>&1")
 
     send_path = temp_mp4 if (os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0) else video_path
-    video_url = serve_video(send_path)
-    
     scenario_name = SCENARIOS.get(args.scenario, SCENARIOS["deadly_corridor"]).get("name", args.scenario)
-    notifier = TelegramNotifier()
-    notifier.send(
-        f"🎬 {scenario_name}  📊 {steps} steps | reward {reward:.1f}  ▶️  {video_url}  ⏱️  Video max 10min verfügbar"
-    )
-
-    # Keep server running briefly for download
-    time.sleep(600)
-    sys.exit(0)
+    send_video(send_path, f"🎬 {scenario_name}  📊 {steps} steps | reward {reward:.1f}")
