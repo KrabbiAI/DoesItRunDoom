@@ -30,7 +30,7 @@ case "$ACTION" in
 
         # Start tensorboard
         mkdir -p "$LOGDIR"
-        tensorboard --logdir "$LOGDIR" --port 6006 --bind_all > "$LOGDIR/tensorboard.log" 2>&1 &
+        tensorboard --logdir "$PROJECT_DIR/runs" --port 6006 --bind_all > "$LOGDIR/tensorboard.log" 2>&1 &
         TB_PID=$!
         echo "📊 TensorBoard: http://$(get_ip):6006"
 
