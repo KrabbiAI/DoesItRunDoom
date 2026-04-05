@@ -25,10 +25,9 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
     """Play one episode with the trained model and record a video."""
 
     notifier = TelegramNotifier()
-    notifier.send(f"🎬 Video Recording gestartet — {env_id} bis zum Tod...")
-
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
     env_id = scenario_cfg["env_id"]
+    notifier.send(f"🎬 Video Recording gestartet — {env_id} bis zum Tod...")
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 
@@ -121,7 +120,7 @@ def send_video(video_path: str, caption: str = "🎮 Doom Agent in Action!"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Record Doom agent playing video")
-    parser.add_argument("--model", type=str, default="runs/default/final_model.zip", help="Path to model")
+    parser.add_argument("--model", type=str, default="runs/default/final_model", help="Path to model")
     parser.add_argument("--scenario", type=str, default="deadly_corridor")
     parser.add_argument("--output", type=str, default="/tmp/doom_playthrough.mp4")
     args = parser.parse_args()

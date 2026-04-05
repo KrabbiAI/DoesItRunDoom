@@ -24,11 +24,12 @@ from env import ScreenOnlyWrapper
 class TrainingCallback(BaseCallback):
     """Tracks episode count during training."""
 
-    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, verbose: int = 0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, duration_min: int = 60, env_id: str = "", verbose: int = 0):
         super().__init__(verbose)
         self.notifier = notifier
         self.outdir = outdir
         self.duration_min = duration_min
+        self.env_id = env_id
         self.episode_count = 0
         self.start_time = time.time()
         self.last_status_time = self.start_time
@@ -133,10 +134,11 @@ def train(
 ):
     """Train PPO agent for specified duration (minutes)."""
     notifier = TelegramNotifier()
-    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {env_id}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
-
     scenario_cfg = SCENARIOS.get(scenario, SCENARIOS["deadly_corridor"])
     env_id = scenario_cfg["env_id"]
+
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {env_id}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}")
+
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
 
@@ -155,7 +157,7 @@ def train(
         **cfg
     )
 
-    inner_callback = TrainingCallback(notifier, outdir, duration_min)
+    inner_callback = TrainingCallback(notifier, outdir, duration_min, env_id)
     callback = StatusCallback(inner_callback)
 
     # Fixed: 1.7 * ep_timeout gives ~60min training at 58 steps/s
@@ -176,7 +178,7 @@ def train(
     elapsed = time.time() - start
 
     # Save model
-    model_path = os.path.join(outdir, "final_model.zip")
+    model_path = os.path.join(outdir, "final_model")
     model.save(model_path)
     print(f"💾 Model saved: {model_path}")
 
