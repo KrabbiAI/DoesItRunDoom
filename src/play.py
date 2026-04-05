@@ -125,13 +125,13 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="/tmp/doom_playthrough.mp4")
     args = parser.parse_args()
 
-    video_path, reward, steps = record_episode(args.model, args.scenario, args.output)
+    video_path, reward, steps, _env_id = record_episode(args.model, args.scenario, args.output)
 
     # Convert to Telegram-friendly format (re-encode as h264, heavily compressed)
     temp_mp4 = "/tmp/doom_telegram.mp4"
     os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 32 -preset ultrafast -vf 'scale=480:-2' -maxrate 500k -bufsize 1M -pix_fmt yuv420p {temp_mp4} > /dev/null 2>&1")
 
     if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
-        send_video(temp_mp4, f"🎮 {env_id} — {steps} steps, reward {reward:.1f}")
+        send_video(temp_mp4, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
     else:
-        send_video(video_path, f"🎮 {env_id} — {steps} steps, reward {reward:.1f}")
+        send_video(video_path, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
