@@ -48,13 +48,22 @@ class TrainingCallback(BaseCallback):
         self.total_timesteps = 0
         self._last_reported_elapsed = 0.0  # for delta calculation
         self.stats = {"total_training_min": 0}
+        # Load best reward from file
+        existing = self._load_stats()
+        self.stats['best_reward'] = existing.get('best_reward', 0)
+        self.best_reward = self.stats['best_reward']
         self.graceful_shutdown = graceful_shutdown if graceful_shutdown is not None else [False]
 
     def _on_step(self) -> bool:
         if self.graceful_shutdown and self.graceful_shutdown[0]:
             print("\n🛑 Graceful shutdown — stoppe nach diesem step")
-            return False  # Stop training after this step
+            return False
         if len(self.model.ep_info_buffer) > 0:
+            ep_info = self.model.ep_info_buffer[-1]
+            reward = ep_info.get('r', 0)
+            if reward > self.best_reward:
+                self.best_reward = reward
+                self.stats['best_reward'] = reward
             self.episode_count += 1
         self.total_timesteps += 1
         return True
