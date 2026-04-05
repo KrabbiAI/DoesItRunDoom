@@ -21,41 +21,27 @@ from config import SCENARIOS
 
 
 class TrainingCallback(BaseCallback):
-    """Notifies after each episode and tracks runtime."""
+    """Tracks episode count during training."""
 
-    def __init__(self, notifier: TelegramNotifier, outdir: str, notify_every: int = 5, verbose: int = 0):
+    def __init__(self, notifier: TelegramNotifier, outdir: str, verbose: int = 0):
         super().__init__(verbose)
         self.notifier = notifier
         self.outdir = outdir
-        self.notify_every = notify_every
         self.episode_count = 0
         self.start_time = time.time()
 
     def _on_step(self) -> bool:
-        # Check if episode ended
         if len(self.model.ep_info_buffer) > 0:
-            info = self.model.ep_info_buffer[-1]
             self.episode_count += 1
-
-            r = info["r"] if "r" in info else 0.0
-            l = info["l"] if "l" in info else 0
-            t = info["t"] if "t" in info else 0
-
-            # Notify every N episodes
-            if self.episode_count % self.notify_every == 0:
-                elapsed = time.time() - self.start_time
-                msg = (
-                    f"🎮 Episode {self.episode_count}\n"
-                    f"⏱️  Reward: {r:.1f} | Steps: {l} | Time: {t:.1f}s\n"
-                    f"🕐 Elapsed: {elapsed/60:.1f} min"
-                )
-                self.notifier.send(msg)
-
         return True
 
     def _on_training_end(self) -> None:
         elapsed = time.time() - self.start_time
-        self.notifier.send(f"✅ Training complete! {self.episode_count} episodes in {elapsed/60:.1f} min")
+        self.notifier.send(
+            f"✅ Training complete!\n"
+            f"🎮 {self.episode_count} episodes\n"
+            f"⏱️  {elapsed/60:.1f} min"
+        )
 
 
 def train(
@@ -63,7 +49,6 @@ def train(
     scenario: str,
     duration_min: int = 60,
     total_timesteps: int | None = None,
-    notify_every: int = 5,
 ):
     """Train PPO agent for specified duration (minutes)."""
     notifier = TelegramNotifier()
@@ -87,7 +72,7 @@ def train(
         **cfg
     )
 
-    callback = TrainingCallback(notifier, outdir, notify_every=notify_every)
+    callback = TrainingCallback(notifier, outdir)
 
     # Calculate timesteps from duration (approx 10 eps/min for deadly_corridor)
     steps_per_minute = 10 * scenario_cfg.get("ep_timeout", 2100)
@@ -95,7 +80,6 @@ def train(
         total_timesteps = duration_min * steps_per_minute
 
     print(f"📊 Training for ~{total_timesteps} timesteps ({duration_min} min)")
-    print(f"📊 Notify every {notify_every} episodes")
 
     start = time.time()
     model.learn(
@@ -124,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument("--outdir", type=str, default="runs/default", help="Output directory")
     parser.add_argument("--scenario", type=str, default="deadly_corridor")
     parser.add_argument("--duration", type=int, default=60, help="Training duration in minutes")
-    parser.add_argument("--notify-every", type=int, default=5, help="Notify every N episodes")
+
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -133,5 +117,4 @@ if __name__ == "__main__":
         outdir=args.outdir,
         scenario=args.scenario,
         duration_min=args.duration,
-        notify_every=args.notify_every,
     )
