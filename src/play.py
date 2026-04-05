@@ -9,6 +9,9 @@ import sys
 import time
 import argparse
 import tempfile
+import threading
+import http.server
+import socketserver
 
 sys.path.insert(0, os.path.dirname(__file__))
 from notify import TelegramNotifier
@@ -98,24 +101,42 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
 
 
 def send_video(video_path: str, caption: str = "🎮 Doom Agent in Action!"):
-    """Send video to Telegram."""
-    notifier = TelegramNotifier()
-
-    if not os.path.exists(video_path):
-        print(f"Video not found: {video_path}")
-        return False
-
-    file_size = os.path.getsize(video_path)
-    print(f"Video size: {file_size / 1024 / 1024:.1f} MB")
-
-    url = f"https://api.telegram.org/bot{notifier.token}/sendVideo"
-    with open(video_path, "rb") as f:
-        files = {"video": f}
-        data = {"chat_id": notifier.chat_id, "caption": caption}
-        import requests
+    """Send video file via Telegram."""
+    bot_token = "8798400513:AAHVGh4T2dtsEXZML6zmtXLNLVPM4lpAcZE"
+    chat_id = "631196199"
+    url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
+    with open(video_path, 'rb') as f:
+        files = {'video': f}
+        data = {'chat_id': chat_id, 'caption': caption}
         r = requests.post(url, data=data, files=files, timeout=120)
         print(f"Telegram response: {r.status_code} {r.text[:200]}")
         return r.status_code == 200
+
+
+def serve_video(video_path: str, port: int = 7843) -> str:
+    """Serve video via HTTP and return the URL."""
+    filename = os.path.basename(video_path)
+    os.chdir(os.path.dirname(video_path))
+    
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass  # silent
+    
+    httpd = socketserver.TCPServer(("", port), Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    
+    return f"http://{get_local_ip()}:{port}/{filename}"
+
+
+def get_local_ip() -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+    return ip
 
 
 if __name__ == "__main__":
@@ -131,7 +152,14 @@ if __name__ == "__main__":
     temp_mp4 = "/tmp/doom_telegram.mp4"
     os.system(f"ffmpeg -y -i {video_path} -c:v libx264 -crf 42 -preset ultrafast -vf 'scale=240:-2' -maxrate 80k -bufsize 160k -pix_fmt yuv420p -r 15 -g 30 {temp_mp4} > /dev/null 2>&1")
 
-    if os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0:
-        send_video(temp_mp4, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
-    else:
-        send_video(video_path, f"🎮 {_env_id} — {steps} steps, reward {reward:.1f}")
+    send_path = temp_mp4 if (os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0) else video_path
+    video_url = serve_video(send_path)
+    
+    notifier = TelegramNotifier()
+    notifier.send(
+        f"🎬 {_env_id}  📊 {steps} steps | reward {reward:.1f}  ▶️  {video_url}  ⏱️  Video max 10min verfügbar\n"
+    )
+
+    # Keep server running briefly for download
+    time.sleep(600)
+    sys.exit(0)
