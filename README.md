@@ -12,16 +12,17 @@ Reinforcement Learning training pipeline that teaches an agent to navigate Doom'
 cd /home/dobby/ludicrous-speed
 
 # Install Python dependencies
-pip install -r requirements.txt
+pip install vizdoom gymnasium stable-baselines3 numpy requests opencv-python
 
-# Install VizDoom (needs cmake, boost, etc.)
-# On Ubuntu/Debian:
+# VizDoom needs these system libs (Ubuntu/Debian):
 sudo apt install cmake libboost-all-dev libboost-python-dev libboost-system-dev
 sudo apt install libjpeg-dev libpng-dev libtiff-dev libexpat1-dev
-sudo apt install zlib1g-dev SDL2-dev libssl-dev
+sudo apt install zlib1g-dev libsdl2-dev libssl-dev
 
-# Get a Doom IWAD (doom2.wad) and place it in _vizdoom/
-# The scenario .cfg files reference: deadly_corridor.cfg
+# Get a Doom IWAD and place it in _vizdoom/
+# Option A: Buy Doom 2 from GOG or Steam, copy doom2.wad to _vizdoom/
+# Option B: Free shareware doom1.wad (limited scenarios) from id Software
+# The .cfg files reference: deadly_corridor.cfg
 
 # Start training (default: 60 min, deadly_corridor)
 python -m src.train --outdir runs/my_run --duration 60 --scenario deadly_corridor
