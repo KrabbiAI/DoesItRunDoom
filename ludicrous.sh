@@ -77,7 +77,7 @@ case "$ACTION" in
             if kill -0 "$PID" 2>/dev/null; then
                 echo "⏳ Graceful SIGTERM an PID $PID..."
                 kill -TERM "$PID" 2>/dev/null
-                for i in $(seq 1 15); do
+                for i in $(seq 1 30); do
                     sleep 1
                     if ! kill -0 "$PID" 2>/dev/null; then
                         echo "✅ Training sauber gestoppt"
