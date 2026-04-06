@@ -57,10 +57,13 @@ class TrainingCallback(BaseCallback):
         self.last_status_time = self.start_time
         self.total_timesteps = 0
         self._last_reported_elapsed = 0.0  # for delta calculation
-        self.stats = {"total_training_min": 0}
-        # Load best reward from file
         existing = self._load_stats()
-        self.stats['best_reward'] = existing.get('best_reward', 0)
+        self.stats = {
+            "total_training_min": existing.get('total_training_min', 0),
+            "total_episodes": existing.get('total_episodes', 0),
+            "total_timesteps": existing.get('total_timesteps', 0),
+            "best_reward": existing.get('best_reward', 0)
+        }
         self.best_reward = self.stats['best_reward']
         self.graceful_shutdown = graceful_shutdown if graceful_shutdown is not None else [False]
 
@@ -90,6 +93,8 @@ class TrainingCallback(BaseCallback):
         # Add only the delta from last reported elapsed
         delta_min = (elapsed - self._last_reported_elapsed) / 60
         self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
+        self.stats['total_episodes'] += self.episode_count
+        self.stats['total_timesteps'] += self.total_timesteps
         self._save_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
@@ -112,14 +117,16 @@ class TrainingCallback(BaseCallback):
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         scenario_name = SCENARIOS.get(self.scenario, SCENARIOS["deadly_corridor"]).get("name", self.scenario)
         next_update = datetime.fromtimestamp(time.time() + 300).strftime('%H:%M')
+        cum_ep = self.stats['total_episodes'] + self.episode_count
+        cum_ts = self.stats['total_timesteps'] + self.total_timesteps
         self.notifier.send(
             f"🏋️ Training läuft noch — {scenario_name}\n"
             f"──────────────\n"
             f"⏱️  {elapsed/60:.1f}/{self.duration_min} min\n"
             f"🕐 Bis {expected_end} Uhr\n"
             f"📬 Nächstes Update: {next_update} Uhr\n"
-            f"🎮 {self.episode_count} episodes\n"
-            f"📊 {self.total_timesteps} timesteps\n"
+            f"🎮 {cum_ep} episodes (Session: {self.episode_count})\n"
+            f"📊 {cum_ts} timesteps (Session: {self.total_timesteps})\n"
             f"⚡ {sps:.0f} steps/s\n"
             f"📈 Gesamte Trainingszeit: {total_str}"
         )
@@ -133,10 +140,15 @@ class TrainingCallback(BaseCallback):
         return {}
 
     def _save_stats(self) -> None:
-        """Save stats for this scenario."""
+        """Save all cumulative stats for this scenario."""
         path = os.path.join(self.outdir, "training_stats.json")
         with open(path, 'w') as f:
-            json.dump(self.stats, f, indent=2)
+            json.dump({
+                "total_training_min": self.stats.get('total_training_min', 0),
+                "total_episodes": self.stats.get('total_episodes', 0),
+                "total_timesteps": self.stats.get('total_timesteps', 0),
+                "best_reward": self.stats.get('best_reward', 0)
+            }, f, indent=2)
 
     def _get_cumulative_min(self) -> float:
         """Get cumulative training minutes for THIS scenario."""

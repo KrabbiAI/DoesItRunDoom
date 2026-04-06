@@ -29,21 +29,3 @@ class TelegramNotifier:
             print(f"[notify] Error: {e}")
             return False
 
-    def send_confirmation(self, scenario: str, folder: str, is_existing: bool) -> bool:
-        status = "wird weitertrainiert ⚠️" if is_existing else "wird neu erstellt 🆕"
-        message = (
-            f"🏎️  <b>{scenario}</b>
-"
-            f"📁 {folder}
-"
-            f"🧠 {status}
-"
-            f"
-"
-            f"Starte Training?"
-        )
-        buttons = [
-            [{"text": "✅ Ja, starte", "callback": f"doom_start_yes_{scenario}"}],
-            [{"text": "❌ Nein, abbrechen", "callback": f"doom_start_no_{scenario}"}]
-        ]
-        return self.send(message, buttons)
