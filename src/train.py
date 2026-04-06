@@ -110,11 +110,14 @@ class TrainingCallback(BaseCallback):
         self._save_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
+        scenario_name = SCENARIOS.get(self.scenario, SCENARIOS["deadly_corridor"]).get("name", self.scenario)
+        next_update = datetime.fromtimestamp(time.time() + 300).strftime('%H:%M')
         self.notifier.send(
-            f"🏋️ Training läuft noch\n"
+            f"🏋️ Training läuft noch — {scenario_name}\n"
             f"──────────────\n"
             f"⏱️  {elapsed/60:.1f}/{self.duration_min} min\n"
             f"🕐 Bis {expected_end} Uhr\n"
+            f"📬 Nächstes Update: {next_update} Uhr\n"
             f"🎮 {self.episode_count} episodes\n"
             f"📊 {self.total_timesteps} timesteps\n"
             f"⚡ {sps:.0f} steps/s\n"
