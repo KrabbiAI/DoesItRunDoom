@@ -58,6 +58,11 @@ class TrainingCallback(BaseCallback):
         if self.graceful_shutdown and self.graceful_shutdown[0]:
             print("\n🛑 Graceful shutdown — stoppe nach diesem step")
             return False
+        # Check if duration exceeded — stop training on time, not just timesteps
+        elapsed_sec = time.time() - self.start_time
+        if elapsed_sec >= self.duration_min * 60 + 5:  # 5s grace
+            print(f"\n⏱️  Duration reached ({elapsed_sec:.0f}s) — stopping training")
+            return False
         if len(self.model.ep_info_buffer) > 0:
             ep_info = self.model.ep_info_buffer[-1]
             reward = ep_info.get('r', 0)
