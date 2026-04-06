@@ -66,18 +66,26 @@ class TrainingCallback(BaseCallback):
         }
         self.best_reward = self.stats['best_reward']
         self.graceful_shutdown = graceful_shutdown if graceful_shutdown is not None else [False]
+        self._duration_reached = False
+        self._episode_ended_after_duration = False
 
     def _on_step(self) -> bool:
         if self.graceful_shutdown and self.graceful_shutdown[0]:
             print("\n🛑 Graceful shutdown — stoppe nach diesem step")
             _cleanup_vizdoom_processes()
             return False
-        # Check if duration exceeded — stop training on time, not just timesteps
+        # Check if duration exceeded — set flag but don't stop until episode ends
         elapsed_sec = time.time() - self.start_time
         if elapsed_sec >= self.duration_min * 60 + 5:  # 5s grace
-            print(f"\n⏱️  Duration reached ({elapsed_sec:.0f}s) — stopping training")
-            _cleanup_vizdoom_processes()
-            return False
+            if not self._duration_reached:
+                print(f"\n⏱️  Duration reached ({elapsed_sec:.0f}s) — episode zu Ende abwarten...")
+                self._duration_reached = True
+            # Don't stop yet — wait for current episode to finish
+            # Check if episode ended (ep_info_buffer has new entry AND we're past duration)
+            if self._episode_ended_after_duration:
+                print(f"\n⏱️  Episode done — stopping training cleanly")
+                _cleanup_vizdoom_processes()
+                return False
         if len(self.model.ep_info_buffer) > 0:
             ep_info = self.model.ep_info_buffer[-1]
             reward = ep_info.get('r', 0)
@@ -85,6 +93,19 @@ class TrainingCallback(BaseCallback):
                 self.best_reward = reward
                 self.stats['best_reward'] = reward
             self.episode_count += 1
+            # Episode ended after duration was reached — stop after this
+            if self._duration_reached and not self._episode_ended_after_duration:
+                self._episode_ended_after_duration = True
+                print(f"   Episode {self.episode_count} complete — stopping cleanly")
+                # Save model and stats BEFORE stopping
+                self.model.save(os.path.join(self.outdir, "final_model"))
+                elapsed = time.time() - self.start_time
+                delta_min = (elapsed - self._last_reported_elapsed) / 60
+                self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
+                self.stats['total_episodes'] += self.episode_count
+                self.stats['total_timesteps'] += self.total_timesteps
+                self._save_cumulative_stats()
+                print(f"💾 Model saved cleanly at {elapsed/60:.1f} min")
         self.total_timesteps += 1
         return True
 
