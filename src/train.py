@@ -57,7 +57,7 @@ class TrainingCallback(BaseCallback):
         self.last_status_time = self.start_time
         self.total_timesteps = 0
         self._last_reported_elapsed = 0.0  # for delta calculation
-        existing = self._load_stats()
+        existing = self._load_cumulative_stats()
         self.stats = {
             "total_training_min": existing.get('total_training_min', 0),
             "total_episodes": existing.get('total_episodes', 0),
@@ -95,7 +95,7 @@ class TrainingCallback(BaseCallback):
         self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
         self.stats['total_episodes'] += self.episode_count
         self.stats['total_timesteps'] += self.total_timesteps
-        self._save_stats()
+        self._save_cumulative_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
@@ -112,7 +112,7 @@ class TrainingCallback(BaseCallback):
         delta_min = (elapsed - self._last_reported_elapsed) / 60
         self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
         self._last_reported_elapsed = elapsed
-        self._save_stats()
+        self._save_cumulative_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         scenario_name = SCENARIOS.get(self.scenario, SCENARIOS["deadly_corridor"]).get("name", self.scenario)
@@ -131,18 +131,28 @@ class TrainingCallback(BaseCallback):
             f"📈 Gesamte Trainingszeit: {total_str}"
         )
 
-    def _load_stats(self) -> dict:
-        """Load stats for this scenario."""
-        path = os.path.join(self.outdir, "training_stats.json")
+    def _stats_path(self) -> str:
+        """Path to this run's stats file."""
+        return os.path.join(self.outdir, "training_stats.json")
+
+    def _cumulative_stats_path(self) -> str:
+        """Path to scenario-level cumulative stats (across all runs)."""
+        # Store cumulative stats in runs/<scenario>/stats.json
+        scenario_dir = os.path.join(os.path.dirname(os.path.dirname(self.outdir)), self.scenario)
+        return os.path.join(scenario_dir, "stats.json")
+
+    def _load_cumulative_stats(self) -> dict:
+        """Load cumulative stats for this scenario from scenario-level file."""
+        path = self._cumulative_stats_path()
         if os.path.exists(path):
             with open(path) as f:
                 return json.load(f)
         return {}
 
-    def _save_stats(self) -> None:
-        """Save all cumulative stats for this scenario."""
-        path = os.path.join(self.outdir, "training_stats.json")
-        print(f"[STATS] Saving: episodes={self.stats.get('total_episodes', 0)}, ts={self.stats.get('total_timesteps', 0)}")
+    def _save_cumulative_stats(self) -> None:
+        """Save cumulative stats to scenario-level file."""
+        path = self._cumulative_stats_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as f:
             json.dump({
                 "total_training_min": self.stats.get('total_training_min', 0),
@@ -151,9 +161,17 @@ class TrainingCallback(BaseCallback):
                 "best_reward": self.stats.get('best_reward', 0)
             }, f, indent=2)
 
+    def _load_run_stats(self) -> dict:
+        """Load stats for this specific run."""
+        path = self._stats_path()
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+        return {}
+
     def _get_cumulative_min(self) -> float:
-        """Get cumulative training minutes for THIS scenario."""
-        data = self._load_stats()
+        """Get cumulative training minutes from scenario-level stats."""
+        data = self._load_cumulative_stats()
         return data.get('total_training_min', 0)
 
     def _fmt_duration(self, total_min: int) -> str:
@@ -188,7 +206,7 @@ class StatusCallback(BaseCallback):
             # Update cumulative stats, send status, then reset session counters
             self.inner.stats['total_episodes'] += self.inner.episode_count
             self.inner.stats['total_timesteps'] += self.inner.total_timesteps
-            self.inner._save_stats()
+            self.inner._save_cumulative_stats()
             self.inner.send_status()  # send BEFORE resetting
             self.inner.episode_count = 0  # reset session counter
             self.inner.total_timesteps = 0  # reset session counter
