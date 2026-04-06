@@ -28,6 +28,16 @@ def _sigterm_handler(signum, frame):
 
 signal.signal(signal.SIGTERM, _sigterm_handler)
 signal.signal(signal.SIGINT, _sigterm_handler)
+
+
+def _cleanup_vizdoom_processes():
+    """Kill all stray vizdoom processes to prevent zombies."""
+    import subprocess
+    try:
+        # Kill all vizdoom processes owned by this user
+        subprocess.run(["pkill", "-9", "-f", "vizdoom"], stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"Cleanup error: {e}")
 from config import SCENARIOS
 from env import ScreenOnlyWrapper
 
@@ -57,11 +67,13 @@ class TrainingCallback(BaseCallback):
     def _on_step(self) -> bool:
         if self.graceful_shutdown and self.graceful_shutdown[0]:
             print("\n🛑 Graceful shutdown — stoppe nach diesem step")
+            _cleanup_vizdoom_processes()
             return False
         # Check if duration exceeded — stop training on time, not just timesteps
         elapsed_sec = time.time() - self.start_time
         if elapsed_sec >= self.duration_min * 60 + 5:  # 5s grace
             print(f"\n⏱️  Duration reached ({elapsed_sec:.0f}s) — stopping training")
+            _cleanup_vizdoom_processes()
             return False
         if len(self.model.ep_info_buffer) > 0:
             ep_info = self.model.ep_info_buffer[-1]
