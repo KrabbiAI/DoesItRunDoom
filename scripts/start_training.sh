@@ -1,21 +1,23 @@
 #!/bin/bash
-# DoesItRunDoom? — Start Training (60 min)
-# Usage: ./scripts/start_training.sh
+# DoesItRunDoom? — Start Training
+# Usage: ./scripts/start_training.sh [duration_min]
+# Default duration: 60 minutes
 
 SESSION_NAME="doom_train"
+DURATION_MIN="${1:-60}"
 RUN_DIR="runs/run_$(date +%Y_%m_%d_%H%M)"
 
 mkdir -p "$RUN_DIR"
 
 echo "🚀 Starting Doom RL Training"
 echo "📁 Run directory: $RUN_DIR"
-echo "⏱️  Duration: 60 minutes"
-echo "🎮 Scenario: $DOOM_SCENARIO (default: deadly_corridor)"
+echo "⏱️  Duration: $DURATION_MIN minutes"
+echo "🎮 Scenario: ${DOOM_SCENARIO:-deadly_corridor}"
 
 # Start tmux session with training
 tmux new-session -d -s "$SESSION_NAME" "
 cd /home/dobby/ludicrous-speed && \
-python -m src.train --outdir '$RUN_DIR' --duration 60 --scenario '${DOOM_SCENARIO:-deadly_corridor}'
+python -m src.train --outdir '$RUN_DIR' --duration $DURATION_MIN --scenario '${DOOM_SCENARIO:-deadly_corridor}'
 "
 
 echo "✅ Training started in tmux session '$SESSION_NAME'"
