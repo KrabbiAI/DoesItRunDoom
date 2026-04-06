@@ -30,9 +30,40 @@ unzip _vizdoom/doom1.zip -d _vizdoom/ && mv _vizdoom/doom/doom.wad _vizdoom/doom
 #
 # deadly_corridor needs doom2.wad (Option A)
 
-# Start training (default: 60 min, deadly_corridor)
-python -m src.train --outdir runs/my_run --duration 60 --scenario deadly_corridor
+# Start training with Telegram notifications
+cd /home/dobby/ludicrous-speed
+TELEGRAM_BOT_TOKEN="<your_bot_token>" TELEGRAM_CHAT_ID="<your_chat_id>" \
+  python -m src.train \
+    --outdir runs/run_$(date +%Y_%m_%d_%H%M) \
+    --duration 60 \
+    --scenario deadly_corridor
 ```
+
+## Telegram Notifications
+
+The training sends Telegram notifications on:
+- **Start**: Run info + previous cumulative stats
+- **Every 5 min**: Progress update with cumulative training time
+- **End**: Final stats + video recording starts
+- **Video**: Recording result (checks if file actually exists)
+
+Requires env vars or defaults in `src/notify.py`:
+```bash
+export TELEGRAM_BOT_TOKEN="<your_bot_token>"
+export TELEGRAM_CHAT_ID="<your_chat_id>"
+```
+
+## Cumulative Stats
+
+Stats are saved in `runs/<scenario>/stats.json` and persist across all runs:
+- `total_training_min` — total training minutes
+- `total_episodes` — total episodes
+- `total_timesteps` — total timesteps
+- `best_reward` — best reward seen
+
+## Episode Graceful Shutdown
+
+When duration is reached, training waits for the current episode to finish before stopping, then saves the model cleanly.
 
 ## Scenarios
 
