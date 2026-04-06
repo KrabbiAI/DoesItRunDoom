@@ -1,172 +1,77 @@
-# DoesItRunDoom? 🏎️💨
+# DoesItRunDoom?
 
-**Will the AI actually run Doom?**
+**Trains a PPO agent to play Doom using VizDoom + Stable-Baselines3.**
 
-Reinforcement Learning Projekt — trainiert einen AI Agent mit PPO + VizDoom, um Doom zu spielen. Der Agent lernt von Pixel-Input. Kein handgeschriebenes Verhalten. Nur Rewards.
+## What This Does
 
-**Szenario:** Deadly Corridor — durchquere einen Korridor, überlebe 6 Gegner, finde die Weste.
+Reinforcement Learning training pipeline that teaches an agent to navigate Doom's Deadly Corridor. Sends Telegram status notifications every 5 minutes, records a video at the end, and tracks cumulative training time across all runs.
 
----
-
-## Setup
+## Quick Start
 
 ```bash
 cd /home/dobby/ludicrous-speed
 
-# Dependencies installieren
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Oder direkt:
-pip install vizdoom>=1.3.0 gymnasium>=0.29.0 stable-baselines3>=2.0.0 numpy>=1.24.0 requests>=2.31.0 opencv-python>=4.0.0
+# Install VizDoom (needs cmake, boost, etc.)
+# On Ubuntu/Debian:
+sudo apt install cmake libboost-all-dev libboost-python-dev libboost-system-dev
+sudo apt install libjpeg-dev libpng-dev libtiff-dev libexpat1-dev
+sudo apt install zlib1g-dev SDL2-dev libssl-dev
+
+# Get a Doom IWAD (doom2.wad) and place it in _vizdoom/
+# The scenario .cfg files reference: deadly_corridor.cfg
+
+# Start training (default: 60 min, deadly_corridor)
+python -m src.train --outdir runs/my_run --duration 60 --scenario deadly_corridor
 ```
 
-**Wichtig:** VizDoom braucht ein funktionierendes `_vizdoom/` Verzeichnis mit WAD-Files. Das `vizdoom`-Package bringt `freedoom1.wad` mit — das reicht für Deadly Corridor.
+## Scenarios
 
----
+| Scenario | Config File | doom_skill |
+|----------|-------------|-------------|
+| `deadly_corridor` | `deadly_corridor.cfg` | 5 |
+| `e1m1` | `e1m1.cfg` | 3 |
 
-## Projekt starten
-
-### Training (60 Minuten)
+## Environment Variables
 
 ```bash
-cd /home/dobby/ludicrous-speed
-./ludicrous.sh start 3600
+TELEGRAM_BOT_TOKEN=8798400513:AAHVGh4T2dtsEXZML6zmtXLNLVPM4lpAcZE
+TELEGRAM_CHAT_ID=631196199
 ```
 
-- Trainiert 60 Minuten (3600 Sekunden)
-- Alle 5 Minuten ein Status-Update per Telegram
-- Am Ende: Modell speichern + Video aufnehmen + zu Telegram schicken
+Defaults are hardcoded in `src/notify.py` — override via env vars if needed.
 
-### Training stoppen
+## Project Structure
+
+```
+ludicrous-speed/
+├── src/
+│   ├── train.py       # Training loop + callbacks + Telegram
+│   ├── play.py        # Record trained agent playing
+│   ├── config.py      # Scenario + PPO hyperparameters
+│   ├── env.py         # VizDoom environment wrapper
+│   └── notify.py      # Telegram notifier
+├── scripts/
+│   └── start_training.sh [duration]  # Training launcher
+├── runs/              # Output: models, stats, tensorboard
+│   └── <scenario>/stats.json  # Cumulative stats per scenario
+├── _vizdoom/          # VizDoom .cfg + Doom IWADs
+└── requirements.txt
+```
+
+## Key Concepts
+
+- **Cumulative Stats**: `runs/<scenario>/stats.json` persists across all runs (total_training_min, total_episodes, best_reward)
+- **Graceful Shutdown**: SIGTERM finishes current episode then exits
+- **Temp Video Cleanup**: Videos in `/tmp/` deleted 1 hour after sending to Telegram
+- **PPO + CNN**: Raw RGB frames → CNN → PPO policy
+
+## Verify Installation
 
 ```bash
-./ludicrous.sh stop
+python -c "from vizdoom import VizDoomEnv; print('VizDoom OK')"
+python -c "from stable_baselines3 import PPO; print('Stable-Baselines3 OK')"
+python -c "import cv2; print('OpenCV OK')"
 ```
-
-### Status anzeigen
-
-```bash
-./ludicrous.sh status
-```
-
-### Video aufnehmen (vom aktuellen Modell)
-
-```bash
-cd /home/dobby/ludicrous-speed
-python3 src/play.py
-```
-
-Video wird nach `/tmp/doom_playthrough.mp4` geschrieben und zu Telegram geschickt.
-
----
-
-## Wie es funktioniert
-
-```
-ludicrous.sh (start/stop/status)
-    └── train.py
-            ├── config.py       — Scenario + PPO Hyperparameters
-            ├── env.py          — ScreenOnlyWrapper (VizDoom → Gymnasium)
-            ├── notify.py       — Telegram Notifications
-            ├── train.py        — PPO Training Loop + Callbacks
-            └── play.py        — Video Recording + Telegram Upload
-```
-
-1. **VizDoom** läuft als Gymnasium-Environment
-2. **PPO (CnnPolicy)** lernt von RGB-Screen-Input
-3. **TensorBoard** Logging in `runs/<run_name>/tensorboard/`
-4. **Telegram** Notifications bei Status-Updates und nach dem Training
-5. **Video** wird mit OpenCV aus den raw Screen-Buffers aufgezeichnet
-
----
-
-## Telegram Commands (via OpenClaw Bot)
-
-| Command | Beschreibung |
-|---------|-------------|
-| `/doom_start` | 60 min Training starten |
-| `/doom_stop` | Training stoppen |
-| `/doom_status` | Aktuellen Status zeigen |
-| `/doom_video` | Video vom aktuellen Modell aufnehmen |
-
----
-
-## Szenarien
-
-### Deadly Corridor (aktuell)
-
-| Config | Wert |
-|--------|------|
-| Buttons | 7 (vorwärts, rückwärts, drehen, schießen) |
-| Ziel | Weste finden, Gegner überleben |
-| Episode Timeout | 2100 Ticks |
-| Doom Skill | 3 |
-| Reward | +dX Richtung Weste, -dX weg, -100 bei Tod |
-
-### Health Gathering (verfügbar, nicht aktiv)
-
-```python
-# In config.py: SCENARIOS["health_gathering"]
-# Gymnasium ID: "VizdoomHealthGatheringSupreme-v0"
-```
-
----
-
-## Wichtige Dateien
-
-```
-src/
-├── config.py          — SCENARIOS dict + PPO Hyperparameters
-├── env.py             — ScreenOnlyWrapper (resized screen extraction)
-├── notify.py          — TelegramNotifier class
-├── train.py           — Training Loop + StatusCallback (5-min updates)
-└── play.py            — Video Recording + Telegram Upload
-
-runs/                  — Trainings-Runs (modelle, tensorboard logs)
-_vizdoom/              — VizDoom WADs + Configs (auto-generated)
-_vizdoom.ini           — VizDoom Settings
-ludicrous.sh          — CLI: start / stop / status
-requirements.txt       — Python Dependencies
-```
-
----
-
-## Troubleshooting
-
-**NNPACK Warnings:** Normal auf CPUs ohne AVX2. Training läuft trotzdem.
-
-**"No module named vizdoom":** `pip install vizdoom>=1.3.0`
-
-**Training startet nicht:** Prüfe ob PID-File existiert (`cat .doom_train.pid`) und Prozess noch läuft (`kill -0 <PID>`)
-
-**Trennlinie:** Notifications haben eine `──────────────` Trennlinie zwischen Header und Stats
-
-**Neues Modell starten (Reset):**
-```bash
-rm -f runs/default/final_model.zip runs/default/monitor.csv runs/default/training_stats.json
-./ludicrous.sh start 3600
-```
-
-**Video schwarz:** Raw VizDoom Frames sind sehr dunkel → `play.py` macht 2.5x brightness boost automatisch.
-
-**Telegram Notifications kommen nicht:** `src/notify.py` Credentials prüfen — aktuell hardcoded im Code.
-
----
-
-## Tech Stack
-
-- **VizDoom 1.3.0** — Doom Engine für RL
-- **Stable Baselines3 2.x** — PPO Implementation
-- **Gymnasium** — Environment Wrapper Standard
-- **OpenCV 4.x** — Headless Video Capture
-- **PyTorch** — CNN Backend
-- **Telegram Bot API** — Notifications
-
----
-
-## Ressourcen
-
-- **GitHub:** https://github.com/KrabbiAI/DoesItRunDoom
-- **VizDoom Docs:** https://vizdoom.farama.org
-- **SB3 Docs:** https://stable-baselines3.readthedocs.io
-- **Deadly Corridor Paper:** https://arxiv.org/abs/1605.09128
