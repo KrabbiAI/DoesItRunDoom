@@ -121,8 +121,8 @@ class TrainingCallback(BaseCallback):
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         self.notifier.send(
             f"✅ Training complete!\n"
-            f"⏱️  {elapsed/60:.1f} min\n"
-            f"🎮 {self.episode_count} episodes\n"
+            f"⏱️  {elapsed/60:.1f} min (Session)\n"
+            f"🎮 {self.stats['total_episodes']} total episodes\n"
             f"📈 Gesamte Trainingszeit: {total_str}"
         )
 
@@ -131,25 +131,33 @@ class TrainingCallback(BaseCallback):
         elapsed = time.time() - self.start_time
         sps = getattr(self, 'steps_per_sec', 0) or 0
         delta_min = (elapsed - self._last_reported_elapsed) / 60
-        self.stats['total_training_min'] = self._get_cumulative_min() + delta_min
+        # Load saved cumulative stats (from previous runs)
+        saved_stats = self._load_cumulative_stats()
+        saved_min = saved_stats.get('total_training_min', 0)
+        saved_ep = saved_stats.get('total_episodes', 0)
+        saved_ts = saved_stats.get('total_timesteps', 0)
+        # Add session delta
+        session_min = self._get_cumulative_min() - saved_min + delta_min
+        self.stats['total_training_min'] = saved_min + delta_min
         self._last_reported_elapsed = elapsed
         self._save_cumulative_stats()
         total_str = self._fmt_duration(int(self.stats['total_training_min']))
         expected_end = datetime.fromtimestamp(self.start_time + self.duration_min * 60).strftime('%H:%M')
         scenario_name = SCENARIOS.get(self.scenario, SCENARIOS["deadly_corridor"]).get("name", self.scenario)
         next_update = datetime.fromtimestamp(time.time() + 300).strftime('%H:%M')
-        cum_ep = self.stats['total_episodes'] + self.episode_count
-        cum_ts = self.stats['total_timesteps'] + self.total_timesteps
+        session_ep = saved_ep + self.episode_count
+        session_ts = saved_ts + self.total_timesteps
         self.notifier.send(
             f"🏋️ Training läuft noch — {scenario_name}\n"
             f"──────────────\n"
             f"⏱️  {elapsed/60:.1f}/{self.duration_min} min\n"
             f"🕐 Bis {expected_end} Uhr\n"
             f"📬 Nächstes Update: {next_update} Uhr\n"
-            f"🎮 {cum_ep} episodes (Session: {self.episode_count})\n"
-            f"📊 {cum_ts} timesteps (Session: {self.total_timesteps})\n"
+            f"🎮 {session_ep} episodes (Session: {self.episode_count})\n"
+            f"📊 {session_ts} timesteps (Session: {self.total_timesteps})\n"
             f"⚡ {sps:.0f} steps/s\n"
-            f"📈 Gesamte Trainingszeit: {total_str}"
+            f"📈 Gesamte Trainingszeit: {total_str}\n"
+            f"   (davon Session: {elapsed/60:.1f} min)"
         )
 
     def _stats_path(self) -> str:
@@ -248,7 +256,18 @@ def train(
 
     scenario_name = scenario_cfg.get("name", scenario)
     next_status = datetime.fromtimestamp(time.time() + 300).strftime('%H:%M')
-    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario_name}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}\n📬 Nächstes Status-Update: {next_status} Uhr")
+    # Show previous cumulative stats if they exist
+    scenario_dir = os.path.join(os.path.dirname(os.path.dirname(outdir)), scenario)
+    stats_path = os.path.join(scenario_dir, "stats.json")
+    prev_stats = ""
+    if os.path.exists(stats_path):
+        with open(stats_path) as f:
+            s = json.load(f)
+        prev_min = int(s.get('total_training_min', 0))
+        prev_ep = s.get('total_episodes', 0)
+        prev_ts = s.get('total_timesteps', 0)
+        prev_stats = f"\n📈 Bisher: {prev_min}m | {prev_ep} ep | {prev_ts} ts"
+    notifier.send(f"🚀 Training gestartet!\n📁 {outdir}\n🎮 {scenario_name}\n⏱️  {duration_min} min\n🕐 {datetime.now().strftime('%H:%M')} → {datetime.fromtimestamp(time.time() + duration_min * 60).strftime('%H:%M')}\n📬 Nächstes Status-Update: {next_status} Uhr{prev_stats}")
 
     env_cls = scenario_cfg["env_cls"]
     env_config = scenario_cfg.get("env_config", {})
