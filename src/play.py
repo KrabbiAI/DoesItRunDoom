@@ -139,3 +139,9 @@ if __name__ == "__main__":
     send_path = temp_mp4 if (os.path.exists(temp_mp4) and os.path.getsize(temp_mp4) > 0) else video_path
     scenario_name = SCENARIOS.get(args.scenario, SCENARIOS["deadly_corridor"]).get("name", args.scenario)
     send_video(send_path, f"🎬 {scenario_name}  📊 {steps} steps | reward {reward:.1f}")
+    # Cleanup temp files
+    for f in (video_path, temp_mp4):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
