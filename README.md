@@ -19,10 +19,16 @@ sudo apt install cmake libboost-all-dev libboost-python-dev libboost-system-dev
 sudo apt install libjpeg-dev libpng-dev libtiff-dev libexpat1-dev
 sudo apt install zlib1g-dev libsdl2-dev libssl-dev
 
-# Get a Doom IWAD and place it in _vizdoom/
-# Option A: Buy Doom 2 from GOG or Steam, copy doom2.wad to _vizdoom/
-# Option B: Free shareware doom1.wad (limited scenarios) from id Software
-# The .cfg files reference: deadly_corridor.cfg
+# Get Doom IWAD files and place them in _vizdoom/
+#
+# Option A — Doom 2 (needed for deadly_corridor):
+wget https://archive.org/download/DOOM2IWADFILE/DOOM2.WAD -O _vizdoom/doom2.wad
+#
+# Option B — Doom 1 shareware (limited, but free):
+wget https://archive.org/download/doom-wads/Doom%20%28v1.9%29.zip -O _vizdoom/doom1.zip
+unzip _vizdoom/doom1.zip -d _vizdoom/ && mv _vizdoom/doom/doom.wad _vizdoom/doom1.wad
+#
+# deadly_corridor needs doom2.wad (Option A)
 
 # Start training (default: 60 min, deadly_corridor)
 python -m src.train --outdir runs/my_run --duration 60 --scenario deadly_corridor
