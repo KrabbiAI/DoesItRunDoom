@@ -47,13 +47,35 @@ python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outd
         ;;
 
     stop)
+        echo "🛑 Stoppe Training..."
+        # 1. Graceful SIGTERM first
         if [ -f "$PIDFILE" ]; then
             PID=$(cat "$PIDFILE")
-            kill "$PID" 2>/dev/null && echo "✅ Training gestoppt" || echo "⚠️ PID nicht gefunden"
+            if kill -0 "$PID" 2>/dev/null; then
+                echo "⏳ Graceful SIGTERM an PID $PID..."
+                kill -TERM "$PID" 2>/dev/null
+                # Wait up to 15s for graceful shutdown
+                for i in $(seq 1 15); do
+                    sleep 1
+                    if ! kill -0 "$PID" 2>/dev/null; then
+                        echo "✅ Training sauber gestoppt"
+                        break
+                    fi
+                done
+                # 2. Force kill if still running
+                if kill -0 "$PID" 2>/dev/null; then
+                    echo "⚠️  Graceful timeout — SIGKILL"
+                    kill -9 "$PID" 2>/dev/null
+                fi
+            else
+                echo "⚠️  PID nicht aktiv"
+            fi
             rm -f "$PIDFILE"
         else
             echo "⚠️  Kein Training aktiv"
         fi
+        # 3. Clean up any orphaned vizdoom processes
+        pkill -9 -f "vizdoom" 2>/dev/null && echo "🧹 Zombie VizDooms gekillt" || true
         pkill -f "tensorboard.*6006" 2>/dev/null && echo "✅ TensorBoard gestoppt" || true
         ;;
 
