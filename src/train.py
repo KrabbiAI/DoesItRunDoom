@@ -185,13 +185,13 @@ class StatusCallback(BaseCallback):
         if now - self.last_status >= self.status_interval:
             elapsed = now - self.inner.start_time
             self.inner.steps_per_sec = self.inner.total_timesteps / elapsed if elapsed > 0 else 1
-            # Update cumulative stats and save to file every status interval
+            # Update cumulative stats, send status, then reset session counters
             self.inner.stats['total_episodes'] += self.inner.episode_count
             self.inner.stats['total_timesteps'] += self.inner.total_timesteps
+            self.inner._save_stats()
+            self.inner.send_status()  # send BEFORE resetting
             self.inner.episode_count = 0  # reset session counter
             self.inner.total_timesteps = 0  # reset session counter
-            self.inner._save_stats()
-            self.inner.send_status()
             self.last_status = now
         return True
 
