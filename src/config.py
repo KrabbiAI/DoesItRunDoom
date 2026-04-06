@@ -13,7 +13,7 @@ SCENARIOS = {
             "window_visible": False,
             "screen_resolution": vizdoom.ScreenResolution.RES_800X600,
             "screen_format": vizdoom.ScreenFormat.RGB24,
-            "doom_skill": 3,
+            "doom_skill": 5,
         },
         "ep_timeout": 2100,
         "ppo": {
