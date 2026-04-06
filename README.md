@@ -37,9 +37,11 @@ python -m src.train --outdir runs/my_run --duration 60 --scenario deadly_corrido
 ## Environment Variables
 
 ```bash
-TELEGRAM_BOT_TOKEN=8798400513:AAHVGh4T2dtsEXZML6zmtXLNLVPM4lpAcZE
-TELEGRAM_CHAT_ID=631196199
+TELEGRAM_BOT_TOKEN=<your_bot_token>
+TELEGRAM_CHAT_ID=<your_chat_id>
 ```
+
+Defaults are hardcoded in `src/notify.py` for local convenience — override via env vars to use your own bot.
 
 Defaults are hardcoded in `src/notify.py` — override via env vars if needed.
 
