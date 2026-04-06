@@ -37,13 +37,6 @@ case "$ACTION" in
             echo "🆕 Neues Modell wird erstellt:"
             echo "   📁 Folder: $OUTDIR"
         fi
-        echo ""
-        echo "✅ Bestätige mit 'yes' um zu starten:"
-        read CONFIRM
-        if [ "$CONFIRM" != "yes" ]; then
-            echo "❌ Abgebrochen."
-            exit 0
-        fi
 
         # Stop existing graceful first
         if [ -f "$PIDFILE" ]; then
