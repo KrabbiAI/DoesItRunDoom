@@ -106,8 +106,8 @@ def record_episode(model_path: str, scenario: str = "deadly_corridor", out_video
 
 def send_video(video_path: str, caption: str = "🎮 Doom Agent in Action!"):
     """Send video file via Telegram."""
-    bot_token = "8798400513:AAHVGh4T2dtsEXZML6zmtXLNLVPM4lpAcZE"
-    chat_id = "631196199"
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "<your_bot_token>")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "<your_chat_id>")
     url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
     with open(video_path, 'rb') as f:
         files = {'video': f}
