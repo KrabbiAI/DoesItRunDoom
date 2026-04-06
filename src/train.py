@@ -321,6 +321,13 @@ def train(
     model.save(model_path)
     print(f"💾 Model saved: {model_path}")
 
+    # Copy to scenario directory for continuity
+    scenario_dir = os.path.join(os.path.dirname(os.path.dirname(outdir)), scenario)
+    scenario_model = os.path.join(scenario_dir, "final_model")
+    import shutil
+    shutil.copy(model_path + ".zip", scenario_model + ".zip")
+    print(f"💾 Model copied to scenario dir: {scenario_model}.zip")
+
     env.close()
 
     # Record video of the trained agent playing

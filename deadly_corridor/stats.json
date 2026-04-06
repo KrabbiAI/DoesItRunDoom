@@ -1,6 +1,6 @@
 {
-  "total_training_min": 10.00013057390849,
-  "total_episodes": 36171,
-  "total_timesteps": 36281,
+  "total_training_min": 123.32446096340813,
+  "total_episodes": 426763,
+  "total_timesteps": 426988,
   "best_reward": 0
 }
