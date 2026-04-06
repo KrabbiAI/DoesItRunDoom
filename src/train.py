@@ -142,6 +142,7 @@ class TrainingCallback(BaseCallback):
     def _save_stats(self) -> None:
         """Save all cumulative stats for this scenario."""
         path = os.path.join(self.outdir, "training_stats.json")
+        print(f"[STATS] Saving: episodes={self.stats.get('total_episodes', 0)}, ts={self.stats.get('total_timesteps', 0)}")
         with open(path, 'w') as f:
             json.dump({
                 "total_training_min": self.stats.get('total_training_min', 0),
