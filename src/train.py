@@ -310,7 +310,7 @@ def train(
     try:
         result = subprocess.run(
             ["python3", os.path.join(os.path.dirname(__file__), "play.py"), "--model", model_path, "--scenario", scenario],
-            capture_output=True, text=True, timeout=300
+            capture_output=True, text=True, timeout=600
         )
         notifier.send(f"📹 Video-Aufnahme abgeschlossen!")
     except Exception as e:
