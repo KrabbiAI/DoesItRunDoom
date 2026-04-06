@@ -18,27 +18,57 @@ DURATION="${3:-3600}"
 
 case "$ACTION" in
     start)
+        # Check if scenario is valid
+        if [ ! -d "$PROJECT_DIR/runs/$SCENARIO" ]; then
+            mkdir -p "$PROJECT_DIR/runs/$SCENARIO"
+        fi
+        OUTDIR="$PROJECT_DIR/runs/$SCENARIO"
+        MODEL_PATH="$OUTDIR/final_model"
+        
         echo "🏎️  DoesItRunDoom? — $SCENARIO"
         echo "⏱️  Training: ${DURATION}s (~$(($DURATION / 60)) min)"
+        echo "📊 TensorBoard: http://$(get_ip):6006"
+        echo ""
+        if [ -f "${MODEL_PATH}.zip" ]; then
+            echo "⚠️  Modell existiert bereits — wird weitertrainiert:"
+            echo "   📁 Folder: $OUTDIR"
+            echo "   🧠 Modell: ${MODEL_PATH}.zip"
+        else
+            echo "🆕 Neues Modell wird erstellt:"
+            echo "   📁 Folder: $OUTDIR"
+        fi
+        echo ""
+        echo "✅ Bestätige mit 'yes' um zu starten:"
+        read CONFIRM
+        if [ "$CONFIRM" != "yes" ]; then
+            echo "❌ Abgebrochen."
+            exit 0
+        fi
 
-        # Stop existing
+        # Stop existing graceful first
         if [ -f "$PIDFILE" ]; then
-            PID=$(cat "$PIDFILE")
-            kill "$PID" 2>/dev/null
+            OLD_PID=$(cat "$PIDFILE")
+            if kill -0 "$OLD_PID" 2>/dev/null; then
+                echo "🛑 Stoppe laufendes Training (PID $OLD_PID)..."
+                kill -TERM "$OLD_PID" 2>/dev/null
+                sleep 5
+                if kill -0 "$OLD_PID" 2>/dev/null; then
+                    kill -9 "$OLD_PID" 2>/dev/null
+                fi
+            fi
             rm -f "$PIDFILE"
         fi
 
         # Start tensorboard
         mkdir -p "$LOGDIR"
+        pkill -f "tensorboard.*6006" 2>/dev/null || true
         tensorboard --logdir "$PROJECT_DIR/runs" --port 6006 --bind_all > "$LOGDIR/tensorboard.log" 2>&1 &
         TB_PID=$!
         echo "📊 TensorBoard: http://$(get_ip):6006"
 
         # Start training
         cd "$SCRIPT_DIR"
-        OUTDIR="$PROJECT_DIR/runs/$SCENARIO"
-mkdir -p "$OUTDIR"
-python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outdir "$OUTDIR" > "$LOGDIR/training.log" 2>&1 &
+        python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outdir "$OUTDIR" > "$LOGDIR/training.log" 2>&1 &
         TRAIN_PID=$!
         echo "$TRAIN_PID" > "$PIDFILE"
 
@@ -48,13 +78,12 @@ python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outd
 
     stop)
         echo "🛑 Stoppe Training..."
-        # 1. Graceful SIGTERM first
+        # 1. Graceful SIGTERM first (up to 15s)
         if [ -f "$PIDFILE" ]; then
             PID=$(cat "$PIDFILE")
             if kill -0 "$PID" 2>/dev/null; then
                 echo "⏳ Graceful SIGTERM an PID $PID..."
                 kill -TERM "$PID" 2>/dev/null
-                # Wait up to 15s for graceful shutdown
                 for i in $(seq 1 15); do
                     sleep 1
                     if ! kill -0 "$PID" 2>/dev/null; then
@@ -62,7 +91,6 @@ python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outd
                         break
                     fi
                 done
-                # 2. Force kill if still running
                 if kill -0 "$PID" 2>/dev/null; then
                     echo "⚠️  Graceful timeout — SIGKILL"
                     kill -9 "$PID" 2>/dev/null
@@ -74,49 +102,38 @@ python3 src/train.py --scenario "$SCENARIO" --duration $((DURATION / 60)) --outd
         else
             echo "⚠️  Kein Training aktiv"
         fi
-        # 3. Clean up any orphaned vizdoom processes
         pkill -9 -f "vizdoom" 2>/dev/null && echo "🧹 Zombie VizDooms gekillt" || true
         pkill -f "tensorboard.*6006" 2>/dev/null && echo "✅ TensorBoard gestoppt" || true
         ;;
 
-    status)
-        echo "🏎️  DoesItRunDoom? — Status"
-        echo "─" * 30
+    restart)
+        $0 stop
+        sleep 2
+        $0 start "$2" "$3"
+        ;;
 
+    status)
         if [ -f "$PIDFILE" ]; then
             PID=$(cat "$PIDFILE")
             if kill -0 "$PID" 2>/dev/null; then
-                echo "✅ TRAINING LAEUFT (PID $PID)"
+                echo "✅ Training aktiv (PID $PID)"
             else
-                echo "⏸️  NICHT LAUFEND (stale PID file)"
-                rm -f "$PIDFILE"
+                echo "⚠️  PID existiert aber Prozess tot"
             fi
         else
-            echo "⏸️  NICHT LAUFEND"
+            echo "⚠️  Kein Training aktiv"
         fi
-
-        if [ -f "$LOGDIR/training.log" ]; then
-            echo ""
-            echo "Letzte Zeilen:"
-            tail -3 "$LOGDIR/training.log" 2>/dev/null
-        fi
-
         echo ""
         echo "📊 TensorBoard: http://$(get_ip):6006"
         ;;
 
     *)
-        echo "Usage: ./ludicrous.sh {start|stop|status} [scenario] [sekunden]"
+        echo "Usage: ./ludicrous.sh {start|stop|restart|status} [scenario] [sekunden]"
+        echo "  start   [scenario] [sekunden]  — Training starten"
+        echo "  stop                           — Training stoppen"
+        echo "  restart [scenario] [sekunden]  — Stoppen + neu starten"
+        echo "  status                         — Status anzeigen"
         echo ""
-        echo "  start              — Training starten (deadly_corridor, default 1h)"
-        echo "  start e1m1        — Training auf E1M1 (Hangar) starten"
-        echo "  start deadly_corridor 3600  — Custom scenario + duration"
-        echo "  stop              — Training stoppen"
-        echo "  status            — Status anzeigen"
-        echo ""
-        echo "Verfügbare Szenarien:"
-        echo "  deadly_corridor   — Standard RL Szenario"
-        echo "  e1m1             — Original Doom Level E1M1 (Hangar)"
-        exit 1
+        echo "Scenarios: deadly_corridor, e1m1"
         ;;
 esac
