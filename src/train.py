@@ -326,14 +326,22 @@ def train(
     # Record video of the trained agent playing
     import subprocess
     notifier.send("🎬 Starte Video-Aufnahme des trainierten Agenten...")
+    video_path = "/tmp/doom_playthrough.mp4"
     try:
         result = subprocess.run(
             ["python3", os.path.join(os.path.dirname(__file__), "play.py"), "--model", model_path, "--scenario", scenario],
             capture_output=True, text=True, timeout=600
         )
-        notifier.send(f"📹 Video-Aufnahme abgeschlossen!")
-    except Exception as e:
-        notifier.send(f"⚠️ Video fehlgeschlagen: {e}")
+        if os.path.exists(video_path) and os.path.getsize(video_path) > 1000:
+            notifier.send(f"📹 Video-Aufnahme abgeschlossen!")
+        else:
+            notifier.send(f"⚠️ Video nicht gefunden oder leer")
+    except subprocess.TimeoutExpired:
+        # Check if video was actually created despite timeout
+        if os.path.exists(video_path) and os.path.getsize(video_path) > 1000:
+            notifier.send(f"📹 Video-Aufnahme abgeschlossen! (timeout reached but video exists)")
+        else:
+            notifier.send(f"⚠️ Video fehlgeschlagen: Timeout nach 10 Minuten")
 
 
 if __name__ == "__main__":
